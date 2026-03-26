@@ -1,0 +1,21 @@
+{
+  "name": "visitor-system",
+  "description": "访客登记管理系统 - 支持二维码自助登记、多角色访问、拍照登记等功能",
+  "repository": "https://github.com/yourusername/visitor-system",
+  "logo": "",
+  "keywords": ["visitor", "management", "nodejs", "express", "docker"],
+  "image": "heroku/nodejs",
+  "stack": "container",
+  "env": {
+    "NODE_ENV": {
+      "description": "运行环境",
+      "value": "production"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "free"
+    }
+  }
+}

@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>访客登记管理系统</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- 访客自助登记页面（无需登录） -->
+    <div id="visitorSelfRegisterPage" class="page">
+        <div class="self-register-container">
+            <div class="self-register-box">
+                <div class="self-register-header">
+                    <h1>访客自助登记</h1>
+                    <p>请填写以下信息进行预约登记</p>
+                </div>
+                <form id="visitorSelfForm" onsubmit="submitVisitorSelf(event)">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>访客姓名 *</label>
+                            <input type="text" id="selfVisitorName" required placeholder="请输入您的姓名">
+                        </div>
+                        <div class="form-group">
+                            <label>联系电话 *</label>
+                            <input type="tel" id="selfVisitorPhone" required placeholder="请输入联系电话">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>身份证号</label>
+                            <input type="text" id="selfVisitorIdCard" placeholder="请输入身份证号">
+                        </div>
+                        <div class="form-group">
+                            <label>来访单位 *</label>
+                            <select id="selfVisitorCompany" required>
+                                <option value="">请选择来访单位</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>被访单位 *</label>
+                            <select id="selfVisitedOrg" required onchange="loadSelfDepartments()">
+                                <option value="">请选择被访单位</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>被访部门 *</label>
+                            <select id="selfVisitedDepartment" required onchange="loadSelfStaff()">
+                                <option value="">请选择被访部门</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>被访人 *</label>
+                        <select id="selfVisitedPerson" required>
+                            <option value="">请选择被访人</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>来访事由 *</label>
+                        <textarea id="selfVisitPurpose" required rows="3" placeholder="请输入来访事由"></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>预约日期 *</label>
+                            <input type="date" id="selfVisitDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label>预约时间 *</label>
+                            <input type="time" id="selfVisitTime" required>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary btn-full">提交预约</button>
+                    </div>
+                </form>
+                <div id="selfRegisterSuccess" style="display: none; text-align: center; padding: 40px;">
+                    <div class="success-icon">✓</div>
+                    <h2>预约提交成功</h2>
+                    <p>您的预约申请已提交，请等待审核</p>
+                    <p>预约单号：<span id="visitorCode"></span></p>
+                    <p style="margin-top: 20px; color: #888;">请截图保存此页面，供保安核验</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 登录页面 -->
+    <div id="loginPage" class="page active">
+        <div class="login-container">
+            <div class="login-box">
+                <h1>访客登记管理系统</h1>
+                <div class="form-group">
+                    <label>用户名</label>
+                    <input type="text" id="loginUsername" placeholder="请输入用户名">
+                </div>
+                <div class="form-group">
+                    <label>密码</label>
+                    <input type="password" id="loginPassword" placeholder="请输入密码">
+                </div>
+                <button onclick="login()" class="btn-primary">登录</button>
+                <p class="demo-account">演示账号：admin/admin（管理员）、front/front（前台）</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主应用页面 -->
+    <div id="mainApp" class="page">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="logo">
+                <h2>访客系统</h2>
+            </div>
+            <nav class="menu">
+                <a href="#" class="menu-item active" data-page="dashboard" onclick="showPage('dashboard')">
+                    <span class="icon">📊</span>首页看板
+                </a>
+                <a href="#" class="menu-item" data-page="visitor-register" onclick="showPage('visitor-register')">
+                    <span class="icon">📝</span>访客登记
+                </a>
+                <a href="#" class="menu-item" data-page="visitor-list" onclick="showPage('visitor-list')">
+                    <span class="icon">📋</span>访客列表
+                </a>
+                <a href="#" class="menu-item" data-page="report" onclick="showPage('report')">
+                    <span class="icon">📊</span>访客报表
+                </a>
+                <a href="#" class="menu-item" data-page="approval" onclick="showPage('approval')">
+                    <span class="icon">✅</span>审核管理
+                    <span id="pendingCount" class="badge">0</span>
+                </a>
+                <a href="#" class="menu-item" data-page="check-in-out" onclick="showPage('check-in-out')">
+                    <span class="icon">📷</span>进出登记
+                </a>
+                <a href="#" class="menu-item" data-page="qrcode" onclick="showPage('qrcode')">
+                    <span class="icon">📱</span>二维码生成
+                </a>
+                <a href="#" class="menu-item" data-page="export" onclick="showPage('export')">
+                    <span class="icon">📥</span>数据导出
+                </a>
+                <a href="#" class="menu-item admin-only" data-page="users" onclick="showPage('users')">
+                    <span class="icon">👥</span>用户管理
+                </a>
+                <a href="#" class="menu-item admin-only" data-page="settings" onclick="showPage('settings')">
+                    <span class="icon">⚙️</span>系统设置
+                </a>
+            </nav>
+            <div class="user-info">
+                <span id="currentUserName">管理员</span>
+                <span id="currentUserRole" class="role-badge">管理员</span>
+                <button onclick="logout()" class="btn-logout">退出</button>
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 首页看板 -->
+            <div id="dashboard" class="content-page active">
+                <h2>首页看板</h2>
+                <div class="stats-cards">
+                    <div class="stat-card">
+                        <div class="stat-icon">👥</div>
+                        <div class="stat-info">
+                            <h3>今日访客</h3>
+                            <p id="todayVisitors">0</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">🏃</div>
+                        <div class="stat-info">
+                            <h3>在访人数</h3>
+                            <p id="currentVisitors">0</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">⏳</div>
+                        <div class="stat-info">
+                            <h3>待审核</h3>
+                            <p id="pendingApprovals">0</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">📊</div>
+                        <div class="stat-info">
+                            <h3>本月累计</h3>
+                            <p id="monthVisitors">0</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="dashboard-section">
+                    <h3>最近访客记录</h3>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>访客姓名</th>
+                                <th>来访事由</th>
+                                <th>被访人</th>
+                                <th>状态</th>
+                                <th>登记时间</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentVisitors"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 访客登记 -->
+            <div id="visitor-register" class="content-page">
+                <h2>访客登记</h2>
+                <form id="visitorForm" onsubmit="submitVisitor(event)">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>访客姓名 *</label>
+                            <input type="text" id="visitorName" required placeholder="请输入访客姓名">
+                        </div>
+                        <div class="form-group">
+                            <label>联系电话 *</label>
+                            <input type="tel" id="visitorPhone" required placeholder="请输入联系电话">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>身份证号</label>
+                            <input type="text" id="visitorIdCard" placeholder="请输入身份证号">
+                        </div>
+                        <div class="form-group">
+                            <label>来访单位 *</label>
+                            <select id="visitorCompany" required>
+                                <option value="">请选择来访单位</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>被访单位 *</label>
+                            <select id="visitedOrg" required onchange="loadDepartments()">
+                                <option value="">请选择被访单位</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>被访部门 *</label>
+                            <select id="visitedDepartment" required onchange="loadStaff()">
+                                <option value="">请选择被访部门</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>被访人 *</label>
+                        <select id="visitedPerson" required>
+                            <option value="">请选择被访人</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>来访事由 *</label>
+                        <textarea id="visitPurpose" required rows="3" placeholder="请输入来访事由"></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>预约日期 *</label>
+                            <input type="date" id="visitDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label>预约时间 *</label>
+                            <input type="time" id="visitTime" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>访客照片</label>
+                        <div class="photo-upload">
+                            <video id="camera" autoplay playsinline style="display:none;"></video>
+                            <canvas id="photoCanvas" style="display:none;"></canvas>
+                            <img id="photoPreview" src="" alt="访客照片预览" style="display:none; max-width: 200px; max-height: 150px;">
+                            <div class="photo-buttons">
+                                <button type="button" onclick="startCamera()" class="btn-secondary">打开摄像头</button>
+                                <button type="button" onclick="capturePhoto()" class="btn-secondary" id="captureBtn" style="display:none;">拍照</button>
+                                <button type="button" onclick="stopCamera()" class="btn-secondary" id="stopCameraBtn" style="display:none;">关闭摄像头</button>
+                                <input type="file" id="photoFile" accept="image/*" onchange="handleFileUpload(event)" style="display:none;">
+                                <button type="button" onclick="document.getElementById('photoFile').click()" class="btn-secondary">从相册选择</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">提交登记</button>
+                        <button type="reset" class="btn-secondary">重置</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 访客列表 -->
+            <div id="visitor-list" class="content-page">
+                <h2>访客列表</h2>
+                <div class="filter-bar">
+                    <input type="text" id="searchKeyword" placeholder="搜索访客姓名/电话" class="search-input">
+                    <select id="filterStatus" class="filter-select">
+                        <option value="">全部状态</option>
+                        <option value="pending">待审核</option>
+                        <option value="approved">已通过</option>
+                        <option value="rejected">已拒绝</option>
+                        <option value="arrived">已到访</option>
+                        <option value="completed">已完结</option>
+                    </select>
+                    <input type="date" id="filterDate" class="filter-date">
+                    <button onclick="searchVisitors()" class="btn-primary">搜索</button>
+                    <button onclick="resetSearch()" class="btn-secondary">重置</button>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>访客姓名</th>
+                            <th>联系电话</th>
+                            <th>来访单位</th>
+                            <th>被访单位</th>
+                            <th>被访部门</th>
+                            <th>被访人</th>
+                            <th>来访事由</th>
+                            <th>预约时间</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="visitorTableBody"></tbody>
+                </table>
+            </div>
+
+            <!-- 审核管理 -->
+            <div id="approval" class="content-page">
+                <h2>审核管理</h2>
+                <div class="approval-tabs">
+                    <button class="tab-btn active" onclick="showApprovalTab('pending')">待审核</button>
+                    <button class="tab-btn" onclick="showApprovalTab('approved')">已通过</button>
+                    <button class="tab-btn" onclick="showApprovalTab('arrived')">已到访</button>
+                    <button class="tab-btn" onclick="showApprovalTab('completed')">已完结</button>
+                    <button class="tab-btn" onclick="showApprovalTab('rejected')">已拒绝</button>
+                </div>
+                <div id="approvalList" class="approval-list">
+                    <!-- 动态加载审核列表 -->
+                </div>
+            </div>
+
+            <!-- 进出登记 -->
+            <div id="check-in-out" class="content-page">
+                <h2>访客到访/离场登记</h2>
+                <div id="checkinResult" class="checkin-container" style="min-height: 500px;">
+                    <!-- 动态加载访客列表 -->
+                </div>
+            </div>
+
+            <!-- 二维码生成 -->
+            <div id="qrcode" class="content-page">
+                <h2>访客自助登记二维码</h2>
+                <div class="export-section" style="text-align: center;">
+                    <div class="form-group">
+                        <label>自助登记链接</label>
+                        <input type="text" id="qrcodeUrl" readonly style="width: 100%; padding: 10px; font-size: 14px;">
+                    </div>
+                    <div class="form-group">
+                        <label>二维码预览</label>
+                        <div id="qrcodeCanvas" style="margin: 20px auto; width: 256px; height: 256px;"></div>
+                        <img id="qrcodeImage" style="display: none; margin: 20px auto; width: 256px; height: 256px;">
+                    </div>
+                    <div class="form-actions" style="justify-content: center;">
+                        <button onclick="generateQRCode(document.getElementById('qrcodeUrl').value)" class="btn-primary">重新生成</button>
+                        <button onclick="downloadQRCode()" class="btn-secondary">下载二维码</button>
+                        <button onclick="printQRCode()" class="btn-secondary">打印二维码</button>
+                    </div>
+                    <p style="margin-top: 20px; color: #666; font-size: 14px;">
+                        提示：访客使用微信扫描二维码即可进行自助登记
+                    </p>
+                </div>
+            </div>
+
+            <!-- 数据导出 -->
+            <div id="export" class="content-page">
+                <h2>数据导出</h2>
+                <div class="export-section">
+                    <div class="form-group">
+                        <label>开始日期</label>
+                        <input type="date" id="exportStartDate">
+                    </div>
+                    <div class="form-group">
+                        <label>结束日期</label>
+                        <input type="date" id="exportEndDate">
+                    </div>
+                    <div class="form-group">
+                        <label>导出格式</label>
+                        <p style="color: #666; font-size: 14px;">将导出为 Excel (.xlsx) 格式</p>
+                    </div>
+                    <div class="form-group">
+                        <label>导出字段</label>
+                        <div class="checkbox-group">
+                            <label><input type="checkbox" value="name" checked> 访客姓名</label>
+                            <label><input type="checkbox" value="phone" checked> 联系电话</label>
+                            <label><input type="checkbox" value="idCard"> 身份证号</label>
+                            <label><input type="checkbox" value="company"> 来访单位</label>
+                            <label><input type="checkbox" value="visitedOrg"> 被访单位</label>
+                            <label><input type="checkbox" value="department"> 被访部门</label>
+                            <label><input type="checkbox" value="visitedPerson" checked> 被访人</label>
+                            <label><input type="checkbox" value="purpose" checked> 来访事由</label>
+                            <label><input type="checkbox" value="visitDate"> 预约日期</label>
+                            <label><input type="checkbox" value="visitTime"> 预约时间</label>
+                            <label><input type="checkbox" value="status" checked> 状态</label>
+                            <label><input type="checkbox" value="arrivedTime"> 到访时间</label>
+                            <label><input type="checkbox" value="arrivedPhoto"> 到访照片</label>
+                            <label><input type="checkbox" value="completedTime"> 完结时间</label>
+                            <label><input type="checkbox" value="completedPhoto"> 离场照片</label>
+                        </div>
+                    </div>
+                    <button onclick="exportToExcel()" class="btn-primary">导出Excel</button>
+                </div>
+            </div>
+
+            <!-- 访客报表 -->
+            <div id="report" class="content-page">
+                <h2>访客明细报表</h2>
+
+                <!-- 统计卡片 -->
+                <div class="stats-cards" style="margin-bottom: 20px;">
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">📊</div>
+                        <div class="stat-info">
+                            <h3>筛选结果</h3>
+                            <p id="reportTotalCount">0</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #52c41a 0%, #389e0d 100%);">✓</div>
+                        <div class="stat-info">
+                            <h3>已完结</h3>
+                            <p id="reportCompletedCount">0</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);">🏃</div>
+                        <div class="stat-info">
+                            <h3>已到访</h3>
+                            <p id="reportArrivedCount">0</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #fa8c16 0%, #d46b08 100%);">⏳</div>
+                        <div class="stat-info">
+                            <h3>待处理</h3>
+                            <p id="reportPendingCount">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 筛选条件 -->
+                <div class="settings-section" style="margin-bottom: 20px;">
+                    <h3>筛选条件</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>开始日期</label>
+                            <input type="date" id="reportStartDate">
+                        </div>
+                        <div class="form-group">
+                            <label>结束日期</label>
+                            <input type="date" id="reportEndDate">
+                        </div>
+                        <div class="form-group">
+                            <label>访客状态</label>
+                            <select id="reportStatus">
+                                <option value="">全部状态</option>
+                                <option value="pending">待审核</option>
+                                <option value="approved">已通过</option>
+                                <option value="rejected">已拒绝</option>
+                                <option value="arrived">已到访</option>
+                                <option value="completed">已完结</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>来访单位</label>
+                            <select id="reportVisitorCompany">
+                                <option value="">全部单位</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>被访单位</label>
+                            <select id="reportVisitedOrg">
+                                <option value="">全部单位</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>被访部门</label>
+                            <select id="reportVisitedDept">
+                                <option value="">全部部门</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>被访人</label>
+                            <select id="reportVisitedStaff">
+                                <option value="">全部人员</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>访客姓名</label>
+                            <input type="text" id="reportVisitorName" placeholder="输入访客姓名">
+                        </div>
+                        <div class="form-group">
+                            <label>访客电话</label>
+                            <input type="text" id="reportVisitorPhone" placeholder="输入访客电话">
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button onclick="generateReport()" class="btn-primary">生成报表</button>
+                        <button onclick="resetReportFilters()" class="btn-secondary">重置条件</button>
+                        <button onclick="exportReportToExcel()" class="btn-primary" style="background: linear-gradient(135deg, #52c41a 0%, #389e0d 100%);">导出Excel</button>
+                    </div>
+                </div>
+
+                <!-- 报表表格 -->
+                <div class="dashboard-section">
+                    <h3>报表数据</h3>
+                    <div style="overflow-x: auto;">
+                        <table class="data-table" id="reportTable">
+                            <thead>
+                                <tr>
+                                    <th>序号</th>
+                                    <th>访客姓名</th>
+                                    <th>联系电话</th>
+                                    <th>来访单位</th>
+                                    <th>被访单位</th>
+                                    <th>被访部门</th>
+                                    <th>被访人</th>
+                                    <th>来访事由</th>
+                                    <th>预约日期</th>
+                                    <th>状态</th>
+                                    <th>登记时间</th>
+                                    <th>到访时间</th>
+                                    <th>到访照片</th>
+                                    <th>离场时间</th>
+                                    <th>离场照片</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reportTableBody">
+                                <tr><td colspan="15" style="text-align:center;">请点击"生成报表"查看数据</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 用户管理 -->
+            <div id="users" class="content-page">
+                <h2>用户管理</h2>
+                <button onclick="showUserModal()" class="btn-primary mb-20">添加用户</button>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>用户名</th>
+                            <th>姓名</th>
+                            <th>角色</th>
+                            <th>部门</th>
+                            <th>联系电话</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="userTableBody"></tbody>
+                </table>
+            </div>
+
+            <!-- 系统设置 -->
+            <div id="settings" class="content-page">
+                <h2>系统设置</h2>
+                <div class="settings-section">
+                    <h3>审核设置</h3>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="requireApproval" checked> 启用访客审核流程
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>审核级别</label>
+                        <select id="approvalLevel" onchange="toggleApprovalConfig()">
+                            <option value="1">一级审核</option>
+                            <option value="2">二级审核</option>
+                        </select>
+                    </div>
+                    <div id="approvalConfigSection">
+                        <div class="form-group">
+                            <label>一级审核人员</label>
+                            <div id="level1Approvers" class="approver-list">
+                                <!-- 动态加载用户列表 -->
+                            </div>
+                        </div>
+                        <div class="form-group" id="level2ApproverGroup" style="display: none;">
+                            <label>二级审核人员</label>
+                            <div id="level2Approvers" class="approver-list">
+                                <!-- 动态加载用户列表 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <h3>拍照设置</h3>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="requirePhoto" checked> 到访/离场时必须拍照
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="savePhotos" checked> 保存访客照片
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 选项配置 -->
+                <div class="settings-section">
+                    <h3>选项配置</h3>
+                    <p class="setting-desc">配置访客登记表单中的下拉选项</p>
+
+                    <div class="form-group">
+                        <label>来访单位列表</label>
+                        <div class="tag-input-container">
+                            <div id="visitorCompanyTags" class="tags"></div>
+                            <input type="text" id="visitorCompanyInput" placeholder="输入单位名称后按回车添加">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>被访单位列表</label>
+                        <div class="tag-input-container">
+                            <div id="visitedOrgTags" class="tags"></div>
+                            <input type="text" id="visitedOrgInput" placeholder="输入单位名称后按回车添加">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>部门与人员配置</label>
+                        <div id="deptStaffConfig">
+                            <div class="dept-staff-item">
+                                <input type="text" class="dept-input" placeholder="部门名称">
+                                <input type="text" class="staff-input" placeholder="人员姓名（多个用逗号分隔）">
+                                <button type="button" onclick="removeDeptStaff(this)" class="btn-danger btn-sm">删除</button>
+                            </div>
+                        </div>
+                        <button type="button" onclick="addDeptStaff()" class="btn-secondary btn-sm">+ 添加部门</button>
+                    </div>
+                </div>
+
+                <button onclick="saveSettings()" class="btn-primary">保存设置</button>
+            </div>
+        </main>
+    </div>
+
+    <!-- 访客详情模态框 -->
+    <div id="visitorModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2>访客详情</h2>
+            <div id="visitorDetail"></div>
+        </div>
+    </div>
+
+    <!-- 用户编辑模态框 -->
+    <div id="userModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeUserModal()">&times;</span>
+            <h2>添加/编辑用户</h2>
+            <form id="userForm" onsubmit="saveUser(event)">
+                <input type="hidden" id="userId">
+                <div class="form-group">
+                    <label>用户名 *</label>
+                    <input type="text" id="userUsername" required>
+                </div>
+                <div class="form-group">
+                    <label>姓名 *</label>
+                    <input type="text" id="userRealName" required>
+                </div>
+                <div class="form-group">
+                    <label>密码 <span id="passwordHint">(不填则不修改)</span></label>
+                    <input type="password" id="userPassword">
+                </div>
+                <div class="form-group">
+                    <label>角色 *</label>
+                    <select id="userRole" required>
+                        <option value="admin">管理员</option>
+                        <option value="front">前台</option>
+                        <option value="staff">员工</option>
+                        <option value="security">安保</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>部门</label>
+                    <input type="text" id="userDepartment">
+                </div>
+                <div class="form-group">
+                    <label>联系电话</label>
+                    <input type="tel" id="userPhone">
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">保存</button>
+                    <button type="button" onclick="closeUserModal()" class="btn-secondary">取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 保安拍照模态框 -->
+    <div id="securityCameraModal" class="modal">
+        <div class="modal-content modal-large">
+            <span class="close" onclick="closeSecurityCameraModal()">&times;</span>
+            <h2 id="cameraModalTitle">现场拍照</h2>
+            <div class="camera-modal-body">
+                <div id="cameraSection">
+                    <video id="securityCamera" autoplay playsinline style="width: 100%; max-width: 500px; border-radius: 8px;"></video>
+                    <canvas id="securityCanvas" style="display:none;"></canvas>
+                </div>
+                <img id="securityPhotoPreview" style="display:none; max-width: 500px; border-radius: 8px;">
+
+                <!-- 文件上传备选 -->
+                <div id="fileUploadSection" style="margin: 20px 0; padding: 20px; background: #f5f7fa; border-radius: 8px;">
+                    <p style="color: #666; margin-bottom: 10px;">如果摄像头无法使用，可以选择从相册上传照片：</p>
+                    <input type="file" id="securityPhotoFile" accept="image/*" onchange="handleSecurityFileUpload(event)" style="display:none;">
+                    <button type="button" onclick="document.getElementById('securityPhotoFile').click()" class="btn-secondary">从相册选择照片</button>
+                </div>
+
+                <div class="camera-controls" style="margin-top: 15px;">
+                    <button onclick="startSecurityCamera()" class="btn-secondary">打开摄像头</button>
+                    <button onclick="captureSecurityPhoto()" class="btn-secondary" id="captureSecurityBtn">拍照</button>
+                    <button onclick="retakeSecurityPhoto()" class="btn-secondary" id="retakeSecurityBtn" style="display:none;">重拍</button>
+                </div>
+                <div class="form-actions" style="margin-top: 20px;">
+                    <button onclick="confirmSecurityAction()" class="btn-primary" id="confirmSecurityBtn">确认</button>
+                    <button onclick="closeSecurityCameraModal()" class="btn-secondary">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
