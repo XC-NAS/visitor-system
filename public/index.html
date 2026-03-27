@@ -568,7 +568,17 @@
             <!-- 用户管理 -->
             <div id="users" class="content-page">
                 <h2>用户管理</h2>
-                <button onclick="showUserModal()" class="btn-primary mb-20">添加用户</button>
+                <div class="mb-20" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button onclick="showUserModal()" class="btn-primary">添加用户</button>
+                    <button onclick="downloadUserTemplate()" class="btn-secondary">下载导入模板</button>
+                    <label class="btn-success" style="cursor: pointer; display: inline-block;">
+                        <input type="file" accept=".xlsx,.xls,.csv" onchange="handleUserFileImport(event)" style="display: none;">
+                        批量导入用户
+                    </label>
+                </div>
+                <p style="color: #666; font-size: 13px; margin-bottom: 15px;">
+                    提示：批量导入支持 Excel (.xlsx/.xls) 或 CSV 格式，请先下载模板文件
+                </p>
                 <table class="data-table">
                     <thead>
                         <tr>
@@ -643,8 +653,19 @@
                     </div>
 
                     <div class="form-group">
-                        <label>部门审核配置</label>
+                        <label>部门与人员配置</label>
                         <p style="color: #666; font-size: 13px; margin-bottom: 10px;">配置各部门的审核人员，系统将按照以下顺序进行审批：科长 → 部长 → 被访人</p>
+
+                        <!-- 批量导入按钮 -->
+                        <div style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+                            <button type="button" onclick="downloadDeptTemplate()" class="btn-secondary btn-sm">下载部门导入模板</button>
+                            <label class="btn-success btn-sm" style="cursor: pointer; display: inline-block;">
+                                <input type="file" accept=".xlsx,.xls,.csv" onchange="handleDeptFileImport(event)" style="display: none;">
+                                批量导入部门
+                            </label>
+                        </div>
+                        <p style="color: #666; font-size: 12px; margin-bottom: 15px;">提示：支持 Excel 批量导入部门组织架构</p>
+
                         <div id="deptStaffConfig">
                             <div class="dept-staff-item" style="background: #f5f7fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
                                 <div class="form-row" style="margin-bottom: 10px;">

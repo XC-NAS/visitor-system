@@ -73,16 +73,6 @@ function getDB() {
     return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
 }
 
-// 解码请求头中的用户信息
-function decodeHeader(value) {
-    if (!value) return '';
-    try {
-        return decodeURIComponent(value);
-    } catch (e) {
-        return value;
-    }
-}
-
 // 初始化
 db = initDB();
 
@@ -112,9 +102,12 @@ app.get('/api/visitors', (req, res) => {
     const data = getDB();
     const userId = req.headers['user-id'];
     const userRole = req.headers['user-role'];
-    const userDept = decodeHeader(req.headers['user-department']);
-    const userPosition = req.headers['user-position'];
-    const userName = decodeHeader(req.headers['user-name']);
+
+    // 从数据库获取用户信息（避免header中的中文编码问题）
+    const user = userId ? data.users.find(u => u.id == userId) : null;
+    const userDept = user ? user.department : '';
+    const userPosition = user ? user.position : '';
+    const userName = user ? user.realName : '';
 
     let visitors = data.visitors;
 
@@ -361,6 +354,39 @@ app.post('/api/users', (req, res) => {
     res.json({ id: newUser.id });
 });
 
+// 批量导入用户
+app.post('/api/users/batch', (req, res) => {
+    const { users } = req.body;
+    const data = getDB();
+    const results = [];
+
+    users.forEach(u => {
+        // 检查用户名是否已存在
+        const existing = data.users.find(existingUser => existingUser.username === u.username);
+        if (existing) {
+            results.push({ username: u.username, success: false, error: '用户名已存在' });
+            return;
+        }
+
+        const newUser = {
+            id: Date.now() + Math.floor(Math.random() * 1000),
+            username: u.username,
+            password: u.password || '123456',
+            realName: u.realName,
+            role: u.role || 'staff',
+            department: u.department || '',
+            position: u.position || 'staff',
+            phone: u.phone || '',
+            status: 'active'
+        };
+        data.users.push(newUser);
+        results.push({ username: u.username, success: true, id: newUser.id });
+    });
+
+    saveDB(data);
+    res.json({ results });
+});
+
 app.put('/api/users/:id', (req, res) => {
     const id = parseInt(req.params.id);
     const u = req.body;
@@ -408,6 +434,34 @@ app.put('/api/options', (req, res) => {
     data.options = { ...data.options, ...req.body };
     saveDB(data);
     res.json({ success: true });
+});
+
+// 获取部门列表（结构化）
+app.get('/api/departments', (req, res) => {
+    const data = getDB();
+    const depts = Object.keys(data.options.deptStaff || {});
+    res.json(depts);
+});
+
+// 批量导入部门配置
+app.post('/api/departments/batch', (req, res) => {
+    const { departments } = req.body;
+    const data = getDB();
+
+    if (!data.options.deptStaff) {
+        data.options.deptStaff = {};
+    }
+
+    departments.forEach(dept => {
+        data.options.deptStaff[dept.name] = {
+            manager: dept.manager || '',
+            head: dept.head || '',
+            staff: dept.staff || []
+        };
+    });
+
+    saveDB(data);
+    res.json({ success: true, count: departments.length });
 });
 
 // ===== 操作日志接口 =====
@@ -466,6 +520,13 @@ function addLog(userId, userName, action, details = '') {
     saveDB(data);
 }
 
+// 辅助函数：从user-id获取用户信息
+function getUserFromHeader(data, req) {
+    const userId = req.headers['user-id'];
+    if (!userId) return null;
+    return data.users.find(u => u.id == userId);
+}
+
 // ===== 数据备份接口 =====
 app.get('/api/backup', (req, res) => {
     const data = getDB();
@@ -481,9 +542,8 @@ app.get('/api/backup', (req, res) => {
     fs.writeFileSync(backupPath, JSON.stringify(backupData, null, 2));
 
     // 添加日志
-    const userId = req.headers['user-id'];
-    const userName = decodeHeader(req.headers['user-name']);
-    addLog(userId, userName, '数据备份', `创建备份文件: ${backupName}`);
+    const user = getUserFromHeader(data, req);
+    addLog(user?.id, user?.realName || '未知用户', '数据备份', `创建备份文件: ${backupName}`);
 
     res.json({
         success: true,
@@ -552,9 +612,8 @@ app.post('/api/backup/restore', (req, res) => {
         saveDB(restoredData);
 
         // 添加日志
-        const userId = req.headers['user-id'];
-        const userName = decodeHeader(req.headers['user-name']);
-        addLog(userId, userName, '数据恢复', `从备份恢复: ${fileName}`);
+        const user = getUserFromHeader(currentData, req);
+        addLog(user?.id, user?.realName || '未知用户', '数据恢复', `从备份恢复: ${fileName}`);
 
         res.json({ success: true });
     } catch (err) {
@@ -573,9 +632,9 @@ app.delete('/api/backup/:filename', (req, res) => {
 
     fs.unlinkSync(filePath);
 
-    const userId = req.headers['user-id'];
-    const userName = decodeHeader(req.headers['user-name']);
-    addLog(userId, userName, '删除备份', `删除文件: ${filename}`);
+    const data = getDB();
+    const user = getUserFromHeader(data, req);
+    addLog(user?.id, user?.realName || '未知用户', '删除备份', `删除文件: ${filename}`);
 
     res.json({ success: true });
 });
