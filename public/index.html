@@ -589,32 +589,22 @@
             <div id="settings" class="content-page">
                 <h2>系统设置</h2>
                 <div class="settings-section">
-                    <h3>审核设置</h3>
+                    <h3>审核流程说明</h3>
+                    <div class="approval-flow-info" style="background: #f6ffed; border: 1px solid #b7eb8f; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <p style="color: #52c41a; font-weight: bold; margin-bottom: 10px;">✓ 三级审核流程已启用（自动）</p>
+                        <p style="color: #666; margin-bottom: 10px;">系统根据部门配置自动生成审核流程：</p>
+                        <ol style="color: #666; padding-left: 20px; line-height: 1.8;">
+                            <li><strong>科长审核</strong> - 被访部门的科长</li>
+                            <li><strong>部长审核</strong> - 被访部门的部长</li>
+                            <li><strong>被访人审核</strong> - 预约的被访人员</li>
+                            <li><strong>安保确认</strong> - 访客到访时保安登记</li>
+                        </ol>
+                        <p style="color: #666; margin-top: 10px; font-size: 13px;">提示：请在下方"部门与人员配置"中设置部门负责人信息</p>
+                    </div>
                     <div class="form-group">
                         <label>
                             <input type="checkbox" id="requireApproval" checked> 启用访客审核流程
                         </label>
-                    </div>
-                    <div class="form-group">
-                        <label>审核级别</label>
-                        <select id="approvalLevel" onchange="toggleApprovalConfig()">
-                            <option value="1">一级审核</option>
-                            <option value="2">二级审核</option>
-                        </select>
-                    </div>
-                    <div id="approvalConfigSection">
-                        <div class="form-group">
-                            <label>一级审核人员</label>
-                            <div id="level1Approvers" class="approver-list">
-                                <!-- 动态加载用户列表 -->
-                            </div>
-                        </div>
-                        <div class="form-group" id="level2ApproverGroup" style="display: none;">
-                            <label>二级审核人员</label>
-                            <div id="level2Approvers" class="approver-list">
-                                <!-- 动态加载用户列表 -->
-                            </div>
-                        </div>
                     </div>
                 </div>
                 <div class="settings-section">
@@ -653,12 +643,26 @@
                     </div>
 
                     <div class="form-group">
-                        <label>部门与人员配置</label>
+                        <label>部门审核配置</label>
+                        <p style="color: #666; font-size: 13px; margin-bottom: 10px;">配置各部门的审核人员，系统将按照以下顺序进行审批：科长 → 部长 → 被访人</p>
                         <div id="deptStaffConfig">
-                            <div class="dept-staff-item">
-                                <input type="text" class="dept-input" placeholder="部门名称">
-                                <input type="text" class="staff-input" placeholder="人员姓名（多个用逗号分隔）">
-                                <button type="button" onclick="removeDeptStaff(this)" class="btn-danger btn-sm">删除</button>
+                            <div class="dept-staff-item" style="background: #f5f7fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                                <div class="form-row" style="margin-bottom: 10px;">
+                                    <input type="text" class="dept-input" placeholder="部门名称（如：技术部）" style="flex: 1;">
+                                </div>
+                                <div class="form-row" style="margin-bottom: 10px;">
+                                    <label style="width: 80px; color: #666; font-size: 13px;">科长：</label>
+                                    <input type="text" class="manager-input" placeholder="科长姓名" style="flex: 1;">
+                                </div>
+                                <div class="form-row" style="margin-bottom: 10px;">
+                                    <label style="width: 80px; color: #666; font-size: 13px;">部长：</label>
+                                    <input type="text" class="head-input" placeholder="部长姓名" style="flex: 1;">
+                                </div>
+                                <div class="form-row">
+                                    <label style="width: 80px; color: #666; font-size: 13px;">员工：</label>
+                                    <input type="text" class="staff-input" placeholder="员工姓名（多个用逗号分隔）" style="flex: 1;">
+                                </div>
+                                <button type="button" onclick="removeDeptStaff(this)" class="btn-danger btn-sm" style="margin-top: 10px;">删除此部门</button>
                             </div>
                         </div>
                         <button type="button" onclick="addDeptStaff()" class="btn-secondary btn-sm">+ 添加部门</button>
@@ -773,16 +777,25 @@
                 </div>
                 <div class="form-group">
                     <label>角色 *</label>
-                    <select id="userRole" required>
+                    <select id="userRole" required onchange="toggleUserPosition()">
                         <option value="admin">管理员</option>
                         <option value="front">前台</option>
                         <option value="staff">员工</option>
                         <option value="security">安保</option>
                     </select>
                 </div>
+                <div class="form-group" id="userPositionGroup">
+                    <label>职位</label>
+                    <select id="userPosition">
+                        <option value="">普通员工</option>
+                        <option value="dept_manager">科长</option>
+                        <option value="dept_head">部长</option>
+                    </select>
+                    <p style="color: #999; font-size: 12px; margin-top: 5px;">设置为科长或部长后，该用户可以审核对应部门的访客申请</p>
+                </div>
                 <div class="form-group">
                     <label>部门</label>
-                    <input type="text" id="userDepartment">
+                    <input type="text" id="userDepartment" placeholder="员工角色需要填写所在部门">
                 </div>
                 <div class="form-group">
                     <label>联系电话</label>

@@ -69,6 +69,11 @@ function getRoleName(role) {
     return roles[role] || role;
 }
 
+function getPositionName(position) {
+    const positions = { 'dept_manager': '科长', 'dept_head': '部长', '': '普通员工' };
+    return positions[position] || position;
+}
+
 function getStatusBadge(status) {
     const statusMap = {
         'pending': { text: '待科长审核', class: 'status-pending' },
@@ -194,8 +199,8 @@ function setupMenuPermissions() {
         // 员工：首页看板、访客列表、审核管理（只有科长/部长/被访人能看到）
         showMenuItems(['dashboard', 'visitor-list']);
 
-        // 科长、部长、被访人可以看到审核管理
-        if (position === 'dept_manager' || position === 'dept_head' || position === 'staff') {
+        // 科长、部长可以看到审核管理
+        if (position === 'dept_manager' || position === 'dept_head') {
             showMenuItems(['approval']);
         }
     } else if (role === 'security') {
@@ -240,8 +245,10 @@ async function loadSelfRegisterDeptStaff() {
         deptSelect.onchange = () => {
             const dept = deptSelect.value;
             if (staffSelect) {
+                const staff = options.deptStaff[dept];
+                const allStaff = staff ? [...(staff.staff || []), staff.manager, staff.head].filter(Boolean) : [];
                 staffSelect.innerHTML = '<option value="">请选择被访人</option>' +
-                    (options.deptStaff[dept] || []).map(s => `<option value="${s}">${s}</option>`).join('');
+                    allStaff.map(s => `<option value="${s}">${s}</option>`).join('');
             }
         };
     }
@@ -360,8 +367,10 @@ async function loadDeptStaffOptions() {
         deptSelect.onchange = () => {
             const dept = deptSelect.value;
             if (staffSelect) {
+                const staff = options.deptStaff[dept];
+                const allStaff = staff ? [...(staff.staff || []), staff.manager, staff.head].filter(Boolean) : [];
                 staffSelect.innerHTML = '<option value="">请选择被访人</option>' +
-                    (options.deptStaff[dept] || []).map(s => `<option value="${s}">${s}</option>`).join('');
+                    allStaff.map(s => `<option value="${s}">${s}</option>`).join('');
             }
         };
     }
@@ -1000,8 +1009,8 @@ async function loadUserList() {
             <td>${u.username}</td>
             <td>${u.realName}</td>
             <td>${getRoleName(u.role)}</td>
-            <td>${u.department}</td>
-            <td>${u.phone}</td>
+            <td>${u.department || '-'}</td>
+            <td>${u.phone || '-'}</td>
             <td>${u.status === 'active' ? '正常' : '禁用'}</td>
             <td>
                 <button class="btn-success" onclick="editUser(${u.id})">编辑</button>
@@ -1011,10 +1020,19 @@ async function loadUserList() {
     `).join('') || '<tr><td colspan="7" style="text-align:center;">暂无数据</td></tr>';
 }
 
+function toggleUserPosition() {
+    const role = document.getElementById('userRole').value;
+    const positionGroup = document.getElementById('userPositionGroup');
+    if (positionGroup) {
+        positionGroup.style.display = role === 'staff' ? 'block' : 'none';
+    }
+}
+
 function showUserModal() {
     document.getElementById('userId').value = '';
     document.getElementById('userForm').reset();
     document.getElementById('passwordHint').textContent = '';
+    toggleUserPosition();
     document.getElementById('userModal').classList.add('active');
 }
 
@@ -1029,6 +1047,7 @@ async function saveUser(event) {
     const password = document.getElementById('userPassword').value;
     const realName = document.getElementById('userRealName').value.trim();
     const role = document.getElementById('userRole').value;
+    const position = document.getElementById('userPosition')?.value || '';
     const department = document.getElementById('userDepartment').value.trim();
     const phone = document.getElementById('userPhone').value.trim();
 
@@ -1041,7 +1060,7 @@ async function saveUser(event) {
         return;
     }
 
-    const userData = { username, realName, role, department, phone };
+    const userData = { username, realName, role, position, department, phone };
     if (password) userData.password = password;
 
     try {
@@ -1065,10 +1084,12 @@ async function editUser(id) {
     document.getElementById('userUsername').value = user.username;
     document.getElementById('userRealName').value = user.realName;
     document.getElementById('userRole').value = user.role;
+    document.getElementById('userPosition').value = user.position || '';
     document.getElementById('userDepartment').value = user.department || '';
     document.getElementById('userPhone').value = user.phone || '';
     document.getElementById('userPassword').value = '';
     document.getElementById('passwordHint').textContent = '(不填则不修改)';
+    toggleUserPosition();
     document.getElementById('userModal').classList.add('active');
 }
 
@@ -1082,15 +1103,13 @@ async function deleteUser(id) {
 async function loadSettings() {
     const settings = await apiGet('/api/settings');
     document.getElementById('requireApproval').checked = settings.requireApproval;
-    document.getElementById('approvalLevel').value = settings.approvalLevel || '1';
     document.getElementById('requirePhoto').checked = settings.requirePhoto;
     document.getElementById('savePhotos').checked = settings.savePhotos;
-    toggleApprovalConfig();
-    loadApproverLists();
+
     const options = await apiGet('/api/options');
     tempVisitorCompanies = [...options.visitorCompanies];
     tempVisitedOrgs = [...options.visitedOrgs];
-    tempDeptStaff = JSON.parse(JSON.stringify(options.deptStaff));
+    tempDeptStaff = JSON.parse(JSON.stringify(options.deptStaff || {}));
     renderVisitorCompanies();
     renderVisitedOrgs();
     renderDeptStaff();
@@ -1119,45 +1138,23 @@ async function loadSettings() {
     };
 }
 
-function toggleApprovalConfig() {
-    const level = document.getElementById('approvalLevel').value;
-    document.getElementById('level2ApproverGroup').style.display = level === '2' ? 'block' : 'none';
-}
-
-async function loadApproverLists() {
-    const users = await apiGet('/api/users');
-    const settings = await apiGet('/api/settings');
-    const level1Div = document.getElementById('level1Approvers');
-    const level2Div = document.getElementById('level2Approvers');
-    level1Div.innerHTML = users.map(u => `
-        <div class="approver-item">
-            <input type="checkbox" value="${u.id}" ${(settings.level1Approvers || []).includes(u.id) ? 'checked' : ''}>
-            <span>${u.realName} (${getRoleName(u.role)})</span>
-        </div>
-    `).join('');
-    level2Div.innerHTML = users.map(u => `
-        <div class="approver-item">
-            <input type="checkbox" value="${u.id}" ${(settings.level2Approvers || []).includes(u.id) ? 'checked' : ''}>
-            <span>${u.realName} (${getRoleName(u.role)})</span>
-        </div>
-    `).join('');
-}
-
 async function saveSettings() {
     const settings = {
         requireApproval: document.getElementById('requireApproval').checked,
-        approvalLevel: document.getElementById('approvalLevel').value,
         requirePhoto: document.getElementById('requirePhoto').checked,
-        savePhotos: document.getElementById('savePhotos').checked,
-        level1Approvers: Array.from(document.querySelectorAll('#level1Approvers input:checked')).map(cb => parseInt(cb.value)),
-        level2Approvers: Array.from(document.querySelectorAll('#level2Approvers input:checked')).map(cb => parseInt(cb.value))
+        savePhotos: document.getElementById('savePhotos').checked
     };
 
     const deptStaff = {};
     document.querySelectorAll('#deptStaffConfig .dept-staff-item').forEach(item => {
-        const dept = item.querySelector('.dept-input').value.trim();
-        const staff = item.querySelector('.staff-input').value.split(',').map(s => s.trim()).filter(Boolean);
-        if (dept) deptStaff[dept] = staff;
+        const dept = item.querySelector('.dept-input')?.value.trim();
+        const manager = item.querySelector('.manager-input')?.value.trim();
+        const head = item.querySelector('.head-input')?.value.trim();
+        const staffStr = item.querySelector('.staff-input')?.value || '';
+        const staff = staffStr.split(',').map(s => s.trim()).filter(Boolean);
+        if (dept) {
+            deptStaff[dept] = { manager, head, staff };
+        }
     });
 
     await apiPut('/api/settings', settings);
@@ -1199,33 +1196,60 @@ function renderDeptStaff() {
     Object.entries(tempDeptStaff).forEach(([dept, staff]) => {
         const div = document.createElement('div');
         div.className = 'dept-staff-item';
+        div.style.cssText = 'background: #f5f7fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;';
         div.innerHTML = `
-            <input type="text" class="dept-input" value="${dept}" placeholder="部门名称">
-            <input type="text" class="staff-input" value="${staff.join(',')}" placeholder="人员姓名(逗号分隔)">
-            <button type="button" onclick="this.parentElement.remove()" class="btn-danger btn-sm">删除</button>
+            <div class="form-row" style="margin-bottom: 10px;">
+                <input type="text" class="dept-input" value="${dept}" placeholder="部门名称（如：技术部）" style="flex: 1;">
+            </div>
+            <div class="form-row" style="margin-bottom: 10px;">
+                <label style="width: 80px; color: #666; font-size: 13px;">科长：</label>
+                <input type="text" class="manager-input" value="${staff.manager || ''}" placeholder="科长姓名" style="flex: 1;">
+            </div>
+            <div class="form-row" style="margin-bottom: 10px;">
+                <label style="width: 80px; color: #666; font-size: 13px;">部长：</label>
+                <input type="text" class="head-input" value="${staff.head || ''}" placeholder="部长姓名" style="flex: 1;">
+            </div>
+            <div class="form-row">
+                <label style="width: 80px; color: #666; font-size: 13px;">员工：</label>
+                <input type="text" class="staff-input" value="${(staff.staff || []).join(',')}" placeholder="员工姓名（多个用逗号分隔）" style="flex: 1;">
+            </div>
+            <button type="button" onclick="this.parentElement.remove()" class="btn-danger btn-sm" style="margin-top: 10px;">删除此部门</button>
         `;
         container.appendChild(div);
     });
 
-    const emptyDiv = document.createElement('div');
-    emptyDiv.className = 'dept-staff-item';
-    emptyDiv.innerHTML = `
-        <input type="text" class="dept-input" placeholder="部门名称">
-        <input type="text" class="staff-input" placeholder="人员姓名(逗号分隔)">
-        <button type="button" onclick="this.parentElement.remove()" class="btn-danger btn-sm">删除</button>
+    // 添加一个空的部门项
+    addDeptStaffItem(container);
+}
+
+function addDeptStaffItem(container) {
+    const div = document.createElement('div');
+    div.className = 'dept-staff-item';
+    div.style.cssText = 'background: #f5f7fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;';
+    div.innerHTML = `
+        <div class="form-row" style="margin-bottom: 10px;">
+            <input type="text" class="dept-input" placeholder="部门名称（如：技术部）" style="flex: 1;">
+        </div>
+        <div class="form-row" style="margin-bottom: 10px;">
+            <label style="width: 80px; color: #666; font-size: 13px;">科长：</label>
+            <input type="text" class="manager-input" placeholder="科长姓名" style="flex: 1;">
+        </div>
+        <div class="form-row" style="margin-bottom: 10px;">
+            <label style="width: 80px; color: #666; font-size: 13px;">部长：</label>
+            <input type="text" class="head-input" placeholder="部长姓名" style="flex: 1;">
+        </div>
+        <div class="form-row">
+            <label style="width: 80px; color: #666; font-size: 13px;">员工：</label>
+            <input type="text" class="staff-input" placeholder="员工姓名（多个用逗号分隔）" style="flex: 1;">
+        </div>
+        <button type="button" onclick="this.parentElement.remove()" class="btn-danger btn-sm" style="margin-top: 10px;">删除此部门</button>
     `;
-    container.appendChild(emptyDiv);
+    container.appendChild(div);
 }
 
 function addDeptStaff() {
-    const div = document.createElement('div');
-    div.className = 'dept-staff-item';
-    div.innerHTML = `
-        <input type="text" class="dept-input" placeholder="部门名称">
-        <input type="text" class="staff-input" placeholder="人员姓名(逗号分隔)">
-        <button type="button" onclick="this.parentElement.remove()" class="btn-danger btn-sm">删除</button>
-    `;
-    document.getElementById('deptStaffConfig').appendChild(div);
+    const container = document.getElementById('deptStaffConfig');
+    addDeptStaffItem(container);
 }
 
 function removeDeptStaff(btn) {
@@ -1334,17 +1358,18 @@ async function loadReportOptions() {
         const dept = deptSelect.value;
         const staffSelect = document.getElementById('reportVisitedStaff');
         if (dept) {
-            const staff = options.deptStaff[dept] || [];
+            const staff = options.deptStaff[dept];
+            const allStaff = staff ? [...(staff.staff || []), staff.manager, staff.head].filter(Boolean) : [];
             staffSelect.innerHTML = '<option value="">全部人员</option>' +
-                staff.map(s => `<option value="${s}">${s}</option>`).join('');
+                allStaff.map(s => `<option value="${s}">${s}</option>`).join('');
         } else {
-            const allStaff = Object.values(options.deptStaff).flat();
+            const allStaff = Object.values(options.deptStaff).flatMap(d => [...(d.staff || []), d.manager, d.head]).filter(Boolean);
             staffSelect.innerHTML = '<option value="">全部人员</option>' +
                 [...new Set(allStaff)].map(s => `<option value="${s}">${s}</option>`).join('');
         }
     };
 
-    const allStaff = Object.values(options.deptStaff).flat();
+    const allStaff = Object.values(options.deptStaff).flatMap(d => [...(d.staff || []), d.manager, d.head]).filter(Boolean);
     document.getElementById('reportVisitedStaff').innerHTML = '<option value="">全部人员</option>' +
         [...new Set(allStaff)].map(s => `<option value="${s}">${s}</option>`).join('');
 }
