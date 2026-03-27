@@ -1,15 +1,32 @@
 // ==================== API 配置 ====================
 const API_BASE = '';
 
+// 带用户认证的 API 请求
+function getAuthHeaders() {
+    const headers = {
+        'Content-Type': 'application/json'
+    };
+    if (currentUser) {
+        headers['user-id'] = currentUser.id;
+        headers['user-role'] = currentUser.role;
+        headers['user-department'] = currentUser.department || '';
+        headers['user-position'] = currentUser.position || '';
+        headers['user-name'] = currentUser.realName || currentUser.username;
+    }
+    return headers;
+}
+
 async function apiGet(url) {
-    const res = await fetch(API_BASE + url);
+    const res = await fetch(API_BASE + url, {
+        headers: getAuthHeaders()
+    });
     return res.json();
 }
 
 async function apiPost(url, data) {
     const res = await fetch(API_BASE + url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(data)
     });
     return res.json();
@@ -18,14 +35,17 @@ async function apiPost(url, data) {
 async function apiPut(url, data) {
     const res = await fetch(API_BASE + url, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(data)
     });
     return res.json();
 }
 
 async function apiDelete(url) {
-    const res = await fetch(API_BASE + url, { method: 'DELETE' });
+    const res = await fetch(API_BASE + url, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+    });
     return res.json();
 }
 
@@ -51,7 +71,10 @@ function getRoleName(role) {
 
 function getStatusBadge(status) {
     const statusMap = {
-        'pending': { text: '待审核', class: 'status-pending' },
+        'pending': { text: '待科长审核', class: 'status-pending' },
+        'level2_pending': { text: '待部长审核', class: 'status-pending' },
+        'level3_pending': { text: '待被访人审核', class: 'status-pending' },
+        'security_pending': { text: '待安保确认', class: 'status-approved' },
         'approved': { text: '已通过', class: 'status-approved' },
         'rejected': { text: '已拒绝', class: 'status-rejected' },
         'arrived': { text: '已到访', class: 'status-arrived' },
@@ -122,6 +145,7 @@ async function login() {
 }
 
 function logout() {
+    stopNotificationPolling();
     currentUser = null;
     sessionStorage.removeItem('currentUser');
     document.getElementById('loginPage').classList.add('active');
@@ -137,12 +161,54 @@ function showMainApp() {
     document.getElementById('mainApp').classList.add('active');
     document.getElementById('currentUserName').textContent = currentUser.realName;
     document.getElementById('currentUserRole').textContent = getRoleName(currentUser.role);
-    if (currentUser.role === 'admin') {
-        document.body.classList.add('user-admin');
-    } else {
-        document.body.classList.remove('user-admin');
-    }
+
+    // 根据权限控制菜单显示
+    setupMenuPermissions();
+
+    // 启动通知轮询
+    startNotificationPolling();
+
     loadDashboard();
+}
+
+// 设置菜单权限
+function setupMenuPermissions() {
+    const role = currentUser.role;
+    const position = currentUser.position;
+
+    // 所有菜单项默认隐藏
+    document.querySelectorAll('.menu-item').forEach(item => {
+        item.style.display = 'none';
+    });
+
+    // 根据角色显示对应菜单
+    if (role === 'admin') {
+        // 管理员：显示所有菜单
+        document.querySelectorAll('.menu-item').forEach(item => {
+            item.style.display = 'flex';
+        });
+    } else if (role === 'front') {
+        // 前台：访客登记、访客列表、访客报表、数据导出、二维码生成
+        showMenuItems(['dashboard', 'visitor-register', 'visitor-list', 'report', 'export', 'qrcode']);
+    } else if (role === 'staff') {
+        // 员工：首页看板、访客列表、审核管理（只有科长/部长/被访人能看到）
+        showMenuItems(['dashboard', 'visitor-list']);
+
+        // 科长、部长、被访人可以看到审核管理
+        if (position === 'dept_manager' || position === 'dept_head' || position === 'staff') {
+            showMenuItems(['approval']);
+        }
+    } else if (role === 'security') {
+        // 安保：首页看板、进出登记
+        showMenuItems(['dashboard', 'check-in-out']);
+    }
+}
+
+function showMenuItems(pages) {
+    pages.forEach(page => {
+        const item = document.querySelector(`.menu-item[data-page="${page}"]`);
+        if (item) item.style.display = 'flex';
+    });
 }
 
 // ==================== 访客自助登记 ====================
@@ -235,6 +301,9 @@ function showPage(pageId) {
     if (pageId === 'settings') loadSettings();
     if (pageId === 'qrcode') loadQRCodePage();
     if (pageId === 'report') loadReportPage();
+    if (pageId === 'statistics') loadStatistics();
+    if (pageId === 'logs') loadLogs(1);
+    if (pageId === 'backup') loadBackupList();
 }
 
 async function loadDashboard() {
@@ -243,9 +312,10 @@ async function loadDashboard() {
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('todayVisitors').textContent = visitors.filter(v => v.visitDate === today).length;
     document.getElementById('currentVisitors').textContent = visitors.filter(v => v.status === 'arrived').length;
-    document.getElementById('pendingApprovals').textContent = visitors.filter(v => v.status === 'pending').length;
+    // 统计所有待审核状态
+    const pendingCount = visitors.filter(v => ['pending', 'level2_pending', 'level3_pending', 'security_pending'].includes(v.status)).length;
+    document.getElementById('pendingApprovals').textContent = pendingCount;
     document.getElementById('monthVisitors').textContent = visitors.filter(v => v.visitDate && v.visitDate.startsWith(today.substring(0, 7))).length;
-    const pendingCount = visitors.filter(v => v.status === 'pending').length;
     const badge = document.getElementById('pendingCount');
     if (badge) {
         badge.textContent = pendingCount;
@@ -434,12 +504,53 @@ function resetSearch() {
 function viewVisitorDetail(id) {
     const visitor = allVisitors.find(v => v.id === id);
     if (!visitor) return;
+
+    // 构建审核链显示
+    let approvalChainHtml = '';
+    if (visitor.approvalChain && visitor.approvalChain.length > 0) {
+        approvalChainHtml = '<div style="margin-top: 15px; padding: 15px; background: #f5f7fa; border-radius: 8px;">';
+        approvalChainHtml += '<p style="font-weight: 600; margin-bottom: 10px;">审核流程：</p>';
+        approvalChainHtml += '<div style="display: flex; flex-direction: column; gap: 8px;">';
+
+        visitor.approvalChain.forEach((item, index) => {
+            let statusText = '';
+            let statusColor = '';
+
+            if (item.status === 'pending') {
+                statusText = '待审核';
+                statusColor = '#fa8c16';
+            } else if (item.status === 'approved') {
+                statusText = '已通过';
+                statusColor = '#52c41a';
+            } else if (item.status === 'rejected') {
+                statusText = '已拒绝';
+                statusColor = '#ff4d4f';
+            }
+
+            const isCurrent = item.level === visitor.currentApprovalLevel && item.status === 'pending';
+            const highlightStyle = isCurrent ? 'background: #e6f7ff; border-left: 3px solid #1890ff;' : '';
+
+            approvalChainHtml += `
+                <div style="padding: 10px; background: white; border-radius: 4px; ${highlightStyle}">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span><strong>${item.roleName}：</strong>${item.approverName}</span>
+                        <span style="color: ${statusColor}; font-weight: 500;">${statusText}</span>
+                    </div>
+                    ${item.approvedAt ? `<div style="font-size: 12px; color: #999; margin-top: 5px;">审核时间：${formatDateTime(item.approvedAt)}</div>` : ''}
+                    ${item.comment ? `<div style="font-size: 12px; color: #666; margin-top: 5px;">备注：${item.comment}</div>` : ''}
+                </div>
+            `;
+        });
+
+        approvalChainHtml += '</div></div>';
+    }
+
     document.getElementById('visitorDetail').innerHTML = `
         <p><strong>访客编号：</strong>${visitor.visitorCode}</p>
         <p><strong>姓名：</strong>${visitor.name}</p>
         <p><strong>电话：</strong>${visitor.phone}</p>
         <p><strong>身份证号：</strong>${visitor.idCard || '-'}</p>
-        <p><strong>来访单位：</strong>${visitor.company}</p>
+        <p><strong>来访单位：</strong>${visitor.company || '个人来访'}</p>
         <p><strong>被访单位：</strong>${visitor.visitedOrg}</p>
         <p><strong>被访部门：</strong>${visitor.visitedDept}</p>
         <p><strong>被访人：</strong>${visitor.visitedStaff}</p>
@@ -447,7 +558,10 @@ function viewVisitorDetail(id) {
         <p><strong>预约时间：</strong>${visitor.visitDate} ${visitor.visitTime || ''}</p>
         <p><strong>状态：</strong>${getStatusBadge(visitor.status)}</p>
         <p><strong>登记时间：</strong>${formatDateTime(visitor.createdAt)}</p>
-        ${visitor.photo ? `<p><strong>访客照片：</strong></p><img src="${visitor.photo}" style="max-width:200px;">` : ''}
+        ${visitor.arrivalTime ? `<p><strong>到访时间：</strong>${formatDateTime(visitor.arrivalTime)}</p>` : ''}
+        ${visitor.departureTime ? `<p><strong>离场时间：</strong>${formatDateTime(visitor.departureTime)}</p>` : ''}
+        ${approvalChainHtml}
+        ${visitor.photo ? `<p style="margin-top: 15px;"><strong>访客照片：</strong></p><img src="${visitor.photo}" style="max-width:200px; border-radius: 8px;">` : ''}
     `;
     document.getElementById('visitorModal').classList.add('active');
 }
@@ -464,24 +578,163 @@ async function loadApprovalList() {
 }
 
 function renderApprovalList(status) {
-    const filtered = allVisitors.filter(v => v.status === status);
+    // 根据当前用户角色过滤可审核的访客
+    let filtered = allVisitors;
+
+    if (currentUser.role === 'staff') {
+        // 员工只能看到本部门或自己是被访人的记录
+        filtered = allVisitors.filter(v => {
+            // 是本部门的访客申请
+            if (v.visitedDept === currentUser.department) {
+                // 检查是否需要当前用户审核
+                const currentApproval = v.approvalChain?.find(a => a.level === v.currentApprovalLevel);
+                if (currentApproval) {
+                    // 科长审核
+                    if (currentApproval.role === 'dept_manager' && currentUser.position === 'dept_manager') {
+                        return true;
+                    }
+                    // 部长审核
+                    if (currentApproval.role === 'dept_head' && currentUser.position === 'dept_head') {
+                        return true;
+                    }
+                    // 被访人审核
+                    if (currentApproval.role === 'host' && currentUser.realName === v.visitedStaff) {
+                        return true;
+                    }
+                }
+                // 已审核完成的也可以看到
+                if (v.status !== 'pending' && v.status !== 'level2_pending' && v.status !== 'level3_pending') {
+                    return true;
+                }
+            }
+            // 或自己是被访人
+            if (v.visitedStaff === currentUser.realName) {
+                return true;
+            }
+            return false;
+        });
+    }
+
+    // 根据状态标签过滤
+    if (status === 'pending') {
+        filtered = filtered.filter(v => ['pending', 'level2_pending', 'level3_pending'].includes(v.status));
+    } else {
+        filtered = filtered.filter(v => v.status === status);
+    }
+
     const listDiv = document.getElementById('approvalList');
-    listDiv.innerHTML = filtered.map(v => `
-        <div class="approval-card">
-            <div class="approval-info">
-                <h4>${v.name} - ${v.company}</h4>
-                <p>被访人: ${v.visitedStaff} | 事由: ${v.reason}</p>
+
+    // 只在待审核标签显示批量操作
+    const showBatchActions = status === 'pending' && (currentUser.role === 'admin' || currentUser.position === 'dept_manager' || currentUser.position === 'dept_head');
+
+    listDiv.innerHTML = filtered.map(v => {
+        // 构建审核链显示
+        const approvalChainHtml = renderApprovalChain(v);
+
+        // 判断当前用户是否可以审核
+        const canApprove = checkCanApprove(v);
+
+        // 复选框（只在待审核状态显示）
+        const checkboxHtml = showBatchActions && canApprove ?
+            `<input type="checkbox" class="visitor-checkbox" data-id="${v.id}" onchange="toggleSelectVisitor(${v.id})" style="margin-right: 10px;">` : '';
+
+        return `
+        <div class="approval-card" style="display: flex; align-items: flex-start;">
+            <div style="margin-top: 5px;">${checkboxHtml}</div>
+            <div class="approval-info" style="flex: 1;">
+                <h4>${v.name} - ${v.company || '个人来访'}</h4>
+                <p>被访部门: ${v.visitedDept} | 被访人: ${v.visitedStaff}</p>
+                <p>事由: ${v.reason}</p>
                 <p>预约时间: ${v.visitDate} ${v.visitTime || ''}</p>
                 <p>状态: ${getStatusBadge(v.status)}</p>
+                ${approvalChainHtml}
             </div>
-            ${v.status === 'pending' ? `
+            ${canApprove ? `
             <div class="approval-actions">
                 <button class="btn-success" onclick="approveVisitor(${v.id})">通过</button>
                 <button class="btn-danger" onclick="rejectVisitor(${v.id})">拒绝</button>
             </div>
             ` : ''}
         </div>
-    `).join('') || '<p style="text-align:center;color:#999;">暂无记录</p>';
+    `}).join('') || '<p style="text-align:center;color:#999;">暂无记录</p>';
+
+    // 重置批量选择
+    selectedVisitors = [];
+    updateBatchButtons();
+}
+
+// 渲染审核链
+function renderApprovalChain(visitor) {
+    if (!visitor.approvalChain || visitor.approvalChain.length === 0) {
+        return '';
+    }
+
+    let html = '<div class="approval-chain" style="margin-top: 10px; padding: 10px; background: #f5f7fa; border-radius: 4px;">';
+    html += '<p style="font-size: 12px; color: #666; margin-bottom: 5px;">审核流程：</p>';
+    html += '<div style="display: flex; gap: 5px; flex-wrap: wrap;">';
+
+    visitor.approvalChain.forEach((item, index) => {
+        let statusIcon = '';
+        let statusClass = '';
+
+        if (item.status === 'pending') {
+            statusIcon = '⏳';
+            statusClass = 'pending';
+        } else if (item.status === 'approved') {
+            statusIcon = '✓';
+            statusClass = 'approved';
+        } else if (item.status === 'rejected') {
+            statusIcon = '✗';
+            statusClass = 'rejected';
+        }
+
+        const isCurrent = item.level === visitor.currentApprovalLevel && item.status === 'pending';
+        const highlightStyle = isCurrent ? 'border: 2px solid #1890ff; font-weight: bold;' : '';
+
+        html += `
+            <div class="approval-step ${statusClass}" style="${highlightStyle} padding: 5px 10px; border-radius: 4px; background: ${item.status === 'approved' ? '#e6f7e6' : item.status === 'rejected' ? '#ffe6e6' : '#fff'};">
+                <span>${statusIcon} ${item.roleName}: ${item.approverName}</span>
+                ${item.approvedAt ? `<span style="font-size: 11px; color: #999;">${new Date(item.approvedAt).toLocaleDateString()}</span>` : ''}
+            </div>
+        `;
+
+        if (index < visitor.approvalChain.length - 1) {
+            html += '<span style="color: #999;">→</span>';
+        }
+    });
+
+    html += '</div></div>';
+    return html;
+}
+
+// 检查当前用户是否可以审核
+function checkCanApprove(visitor) {
+    // 管理员可以审核所有
+    if (currentUser.role === 'admin') return true;
+
+    // 员工需要检查权限
+    if (currentUser.role === 'staff') {
+        // 必须是被访部门
+        if (visitor.visitedDept !== currentUser.department) return false;
+
+        const currentApproval = visitor.approvalChain?.find(a => a.level === visitor.currentApprovalLevel);
+        if (!currentApproval || currentApproval.status !== 'pending') return false;
+
+        // 科长审核
+        if (currentApproval.role === 'dept_manager' && currentUser.position === 'dept_manager') {
+            return true;
+        }
+        // 部长审核
+        if (currentApproval.role === 'dept_head' && currentUser.position === 'dept_head') {
+            return true;
+        }
+        // 被访人审核
+        if (currentApproval.role === 'host' && currentUser.realName === visitor.visitedStaff) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 function showApprovalTab(tab) {
@@ -491,21 +744,45 @@ function showApprovalTab(tab) {
 }
 
 async function approveVisitor(id) {
-    await apiPut(`/api/visitors/${id}`, {
-        status: 'approved',
-        approvedBy: currentUser.username,
-        approvedAt: new Date().toISOString()
-    });
-    loadApprovalList();
+    const comment = prompt('请输入审核意见（可选）：') || '';
+    try {
+        const result = await apiPost(`/api/visitors/${id}/approve`, {
+            action: 'approve',
+            comment: comment,
+            userId: currentUser.id
+        });
+        if (result.success) {
+            alert('审核通过');
+            loadApprovalList();
+        } else {
+            alert(result.error || '审核失败');
+        }
+    } catch (err) {
+        alert('审核失败: ' + err.message);
+    }
 }
 
 async function rejectVisitor(id) {
-    await apiPut(`/api/visitors/${id}`, {
-        status: 'rejected',
-        approvedBy: currentUser.username,
-        approvedAt: new Date().toISOString()
-    });
-    loadApprovalList();
+    const comment = prompt('请输入拒绝原因：') || '';
+    if (!comment) {
+        alert('请输入拒绝原因');
+        return;
+    }
+    try {
+        const result = await apiPost(`/api/visitors/${id}/approve`, {
+            action: 'reject',
+            comment: comment,
+            userId: currentUser.id
+        });
+        if (result.success) {
+            alert('已拒绝');
+            loadApprovalList();
+        } else {
+            alert(result.error || '操作失败');
+        }
+    } catch (err) {
+        alert('操作失败: ' + err.message);
+    }
 }
 
 // ==================== 安保进出登记 ====================
@@ -516,18 +793,20 @@ async function initSecurityCheckin() {
 }
 
 function renderSecurityLists() {
-    const approvedList = allVisitors.filter(v => v.status === 'approved');
+    // 安保只能看到已通过全部审核（security_pending）或已到访的访客
+    const pendingList = allVisitors.filter(v => v.status === 'security_pending');
     const arrivedList = allVisitors.filter(v => v.status === 'arrived');
 
     const container = document.getElementById('checkinResult');
     container.innerHTML = `
-        <h3 style="margin: 20px 0 15px; color: #1890ff;">待到访访客 (${approvedList.length})</h3>
-        ${approvedList.length > 0 ? approvedList.map(v => `
+        <h3 style="margin: 20px 0 15px; color: #1890ff;">待到访访客 (${pendingList.length})</h3>
+        ${pendingList.length > 0 ? pendingList.map(v => `
             <div class="visitor-card" style="margin-bottom: 15px;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap: wrap;">
                     <div>
-                        <h4 style="margin-bottom: 8px;">${v.name} - ${v.company}</h4>
-                        <p style="color:#666;">被访人: ${v.visitedStaff} | 预约时间: ${v.visitDate} ${v.visitTime || ''}</p>
+                        <h4 style="margin-bottom: 8px;">${v.name} - ${v.company || '个人来访'}</h4>
+                        <p style="color:#666;">被访部门: ${v.visitedDept} | 被访人: ${v.visitedStaff}</p>
+                        <p style="color:#666;">预约时间: ${v.visitDate} ${v.visitTime || ''}</p>
                         <p style="color:#666;">预约单号: <strong>${v.visitorCode}</strong></p>
                     </div>
                     <button class="btn-arrived" onclick="openSecurityCameraForVisitor(${v.id}, 'arrival')">登记到访</button>
@@ -538,10 +817,10 @@ function renderSecurityLists() {
         <h3 style="margin: 30px 0 15px; color: #52c41a;">在访访客 (${arrivedList.length})</h3>
         ${arrivedList.length > 0 ? arrivedList.map(v => `
             <div class="visitor-card" style="margin-bottom: 15px; border-left: 4px solid #52c41a;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap: wrap;">
                     <div>
-                        <h4 style="margin-bottom: 8px;">${v.name} - ${v.company}</h4>
-                        <p style="color:#666;">被访人: ${v.visitedStaff}</p>
+                        <h4 style="margin-bottom: 8px;">${v.name} - ${v.company || '个人来访'}</h4>
+                        <p style="color:#666;">被访部门: ${v.visitedDept} | 被访人: ${v.visitedStaff}</p>
                         <p style="color:#666;">到访时间: ${formatDateTime(v.arrivalTime)}</p>
                         <p style="color:#666;">预约单号: <strong>${v.visitorCode}</strong></p>
                     </div>
@@ -653,23 +932,21 @@ async function confirmSecurityAction() {
         alert('请先拍照');
         return;
     }
-    if (currentSecurityAction === 'arrival') {
-        await apiPut(`/api/visitors/${currentSecurityVisitor.id}`, {
-            status: 'arrived',
-            arrivalPhoto: securityPhoto,
-            arrivalTime: new Date().toISOString()
+    try {
+        const result = await apiPost(`/api/visitors/${currentSecurityVisitor.id}/security`, {
+            action: currentSecurityAction,
+            photo: securityPhoto
         });
-        alert('到访登记成功');
-    } else if (currentSecurityAction === 'departure') {
-        await apiPut(`/api/visitors/${currentSecurityVisitor.id}`, {
-            status: 'completed',
-            departurePhoto: securityPhoto,
-            departureTime: new Date().toISOString()
-        });
-        alert('离场登记成功');
+        if (result.success) {
+            alert(currentSecurityAction === 'arrival' ? '到访登记成功' : '离场登记成功');
+            closeSecurityCameraModal();
+            initSecurityCheckin();
+        } else {
+            alert(result.error || '操作失败');
+        }
+    } catch (err) {
+        alert('操作失败: ' + err.message);
     }
-    closeSecurityCameraModal();
-    initSecurityCheckin();
 }
 
 // ==================== 数据导出 ====================
@@ -1108,7 +1385,8 @@ function updateReportStats() {
     document.getElementById('reportTotalCount').textContent = currentReportData.length;
     document.getElementById('reportCompletedCount').textContent = currentReportData.filter(v => v.status === 'completed').length;
     document.getElementById('reportArrivedCount').textContent = currentReportData.filter(v => v.status === 'arrived').length;
-    document.getElementById('reportPendingCount').textContent = currentReportData.filter(v => ['pending', 'approved'].includes(v.status)).length;
+    // 待处理包括所有待审核状态
+    document.getElementById('reportPendingCount').textContent = currentReportData.filter(v => ['pending', 'level2_pending', 'level3_pending', 'security_pending'].includes(v.status)).length;
 }
 
 function renderReportTable() {
@@ -1214,4 +1492,423 @@ function exportReportToExcel() {
     const startDate = document.getElementById('reportStartDate').value;
     const endDate = document.getElementById('reportEndDate').value;
     XLSX.writeFile(wb, `访客报表_${startDate}_${endDate}.xlsx`);
+}
+
+// ==================== 批量操作 ====================
+let selectedVisitors = [];
+
+function toggleSelectAll() {
+    const checkboxes = document.querySelectorAll('.visitor-checkbox');
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    const isChecked = selectAllCheckbox.checked;
+
+    checkboxes.forEach(cb => {
+        cb.checked = isChecked;
+        const id = parseInt(cb.dataset.id);
+        if (isChecked && !selectedVisitors.includes(id)) {
+            selectedVisitors.push(id);
+        } else if (!isChecked) {
+            selectedVisitors = selectedVisitors.filter(v => v !== id);
+        }
+    });
+
+    updateBatchButtons();
+}
+
+function toggleSelectVisitor(id) {
+    const checkbox = document.querySelector(`.visitor-checkbox[data-id="${id}"]`);
+    if (checkbox.checked) {
+        if (!selectedVisitors.includes(id)) {
+            selectedVisitors.push(id);
+        }
+    } else {
+        selectedVisitors = selectedVisitors.filter(v => v !== id);
+    }
+    updateBatchButtons();
+}
+
+function updateBatchButtons() {
+    const batchButtons = document.querySelectorAll('.batch-action-btn');
+    batchButtons.forEach(btn => {
+        btn.disabled = selectedVisitors.length === 0;
+        btn.textContent = btn.dataset.text + (selectedVisitors.length > 0 ? ` (${selectedVisitors.length})` : '');
+    });
+}
+
+async function batchApprove() {
+    if (selectedVisitors.length === 0) return;
+
+    const comment = prompt('请输入批量审核意见（可选）：') || '';
+    if (!confirm(`确定要批量通过 ${selectedVisitors.length} 条记录吗？`)) return;
+
+    try {
+        const result = await apiPost('/api/visitors/batch/approve', {
+            ids: selectedVisitors,
+            action: 'approve',
+            comment: comment,
+            userId: currentUser.id
+        });
+
+        alert(`批量审核完成：成功 ${result.successCount} 条，失败 ${result.failCount} 条`);
+        selectedVisitors = [];
+        loadApprovalList();
+    } catch (err) {
+        alert('批量审核失败: ' + err.message);
+    }
+}
+
+async function batchReject() {
+    if (selectedVisitors.length === 0) return;
+
+    const comment = prompt('请输入批量拒绝原因：') || '';
+    if (!comment) {
+        alert('请输入拒绝原因');
+        return;
+    }
+    if (!confirm(`确定要批量拒绝 ${selectedVisitors.length} 条记录吗？`)) return;
+
+    try {
+        const result = await apiPost('/api/visitors/batch/approve', {
+            ids: selectedVisitors,
+            action: 'reject',
+            comment: comment,
+            userId: currentUser.id
+        });
+
+        alert(`批量审核完成：成功 ${result.successCount} 条，失败 ${result.failCount} 条`);
+        selectedVisitors = [];
+        loadApprovalList();
+    } catch (err) {
+        alert('批量审核失败: ' + err.message);
+    }
+}
+
+async function batchDeleteVisitors() {
+    if (selectedVisitors.length === 0) return;
+
+    if (!confirm(`确定要删除选中的 ${selectedVisitors.length} 条记录吗？此操作不可恢复！`)) return;
+
+    try {
+        const result = await apiPost('/api/visitors/batch/delete', {
+            ids: selectedVisitors,
+            userId: currentUser.id
+        });
+
+        alert(`成功删除 ${result.deletedCount} 条记录`);
+        selectedVisitors = [];
+        loadVisitorList();
+    } catch (err) {
+        alert('批量删除失败: ' + err.message);
+    }
+}
+
+// ==================== 实时通知 ====================
+let notificationInterval = null;
+
+function startNotificationPolling() {
+    // 每30秒检查一次待审核数量
+    notificationInterval = setInterval(async () => {
+        if (!currentUser) return;
+
+        try {
+            const visitors = await apiGet('/api/visitors');
+            const pendingCount = visitors.filter(v =>
+                ['pending', 'level2_pending', 'level3_pending'].includes(v.status) &&
+                checkCanApprove(v)
+            ).length;
+
+            updateNotificationBadge(pendingCount);
+        } catch (err) {
+            console.error('轮询通知失败:', err);
+        }
+    }, 30000);
+}
+
+function stopNotificationPolling() {
+    if (notificationInterval) {
+        clearInterval(notificationInterval);
+        notificationInterval = null;
+    }
+}
+
+function updateNotificationBadge(count) {
+    const badge = document.getElementById('pendingCount');
+    if (badge) {
+        badge.textContent = count;
+        badge.style.display = count > 0 ? 'inline' : 'none';
+
+        // 添加闪烁效果提醒
+        if (count > 0) {
+            badge.classList.add('badge-pulse');
+            setTimeout(() => badge.classList.remove('badge-pulse'), 2000);
+        }
+    }
+}
+
+// ==================== 操作日志 ====================
+let currentLogs = [];
+let currentLogPage = 1;
+let totalLogPages = 1;
+
+async function loadLogs(page = 1) {
+    const userFilter = document.getElementById('logUserFilter')?.value || '';
+    const actionFilter = document.getElementById('logActionFilter')?.value || '';
+    const startDate = document.getElementById('logStartDate')?.value || '';
+    const endDate = document.getElementById('logEndDate')?.value || '';
+
+    const params = new URLSearchParams({
+        page: page,
+        limit: 20
+    });
+
+    if (userFilter) params.append('user', userFilter);
+    if (actionFilter) params.append('action', actionFilter);
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+
+    try {
+        const result = await apiGet(`/api/logs?${params}`);
+        currentLogs = result.logs || [];
+        currentLogPage = result.page || 1;
+        totalLogPages = result.totalPages || 1;
+
+        renderLogs();
+        renderLogPagination();
+    } catch (err) {
+        console.error('加载日志失败:', err);
+    }
+}
+
+function renderLogs() {
+    const tbody = document.getElementById('logTableBody');
+    if (!tbody) return;
+
+    if (currentLogs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">暂无日志记录</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = currentLogs.map(log => `
+        <tr>
+            <td>${formatDateTime(log.createdAt)}</td>
+            <td>${log.userName || '-'}</td>
+            <td>${log.action}</td>
+            <td>${log.details || '-'}</td>
+            <td>${log.ip || '-'}</td>
+        </tr>
+    `).join('');
+}
+
+function renderLogPagination() {
+    const container = document.getElementById('logPagination');
+    if (!container) return;
+
+    let html = `
+        <button onclick="loadLogs(${currentLogPage - 1})" ${currentLogPage <= 1 ? 'disabled' : ''}>上一页</button>
+        <span>第 ${currentLogPage} / ${totalLogPages} 页</span>
+        <button onclick="loadLogs(${currentLogPage + 1})" ${currentLogPage >= totalLogPages ? 'disabled' : ''}>下一页</button>
+    `;
+    container.innerHTML = html;
+}
+
+function exportLogs() {
+    if (currentLogs.length === 0) {
+        alert('没有日志可导出');
+        return;
+    }
+
+    const data = currentLogs.map(log => ({
+        '时间': formatDateTime(log.createdAt),
+        '用户': log.userName || '-',
+        '操作': log.action,
+        '详情': log.details || '-',
+        'IP地址': log.ip || '-'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '操作日志');
+    XLSX.writeFile(wb, `操作日志_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+// ==================== 数据备份 ====================
+async function loadBackupList() {
+    try {
+        const backups = await apiGet('/api/backup/list');
+        const tbody = document.getElementById('backupTableBody');
+        if (!tbody) return;
+
+        if (backups.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">暂无备份文件</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = backups.map(b => `
+            <tr>
+                <td>${b.fileName}</td>
+                <td>${(b.size / 1024).toFixed(2)} KB</td>
+                <td>${formatDateTime(b.createdAt)}</td>
+                <td>
+                    <a href="/api/backup/download/${b.fileName}" class="btn-success" download>下载</a>
+                    <button class="btn-danger" onclick="restoreBackup('${b.fileName}')">恢复</button>
+                    <button class="btn-secondary" onclick="deleteBackup('${b.fileName}')">删除</button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        alert('加载备份列表失败: ' + err.message);
+    }
+}
+
+async function createBackup() {
+    try {
+        const result = await apiGet('/api/backup');
+        alert(`备份创建成功: ${result.fileName}`);
+        loadBackupList();
+    } catch (err) {
+        alert('备份失败: ' + err.message);
+    }
+}
+
+async function restoreBackup(fileName) {
+    if (!confirm(`确定要从 ${fileName} 恢复数据吗？当前数据将被覆盖！`)) return;
+
+    try {
+        const result = await apiPost('/api/backup/restore', { fileName });
+        if (result.success) {
+            alert('数据恢复成功，请刷新页面');
+            location.reload();
+        }
+    } catch (err) {
+        alert('恢复失败: ' + err.message);
+    }
+}
+
+async function deleteBackup(fileName) {
+    if (!confirm(`确定要删除备份 ${fileName} 吗？`)) return;
+
+    try {
+        await apiDelete(`/api/backup/${fileName}`);
+        loadBackupList();
+    } catch (err) {
+        alert('删除失败: ' + err.message);
+    }
+}
+
+// ==================== 统计报表 ====================
+async function loadStatistics() {
+    const startDate = document.getElementById('statStartDate')?.value || '';
+    const endDate = document.getElementById('statEndDate')?.value || '';
+
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+
+    try {
+        const stats = await apiGet(`/api/statistics?${params}`);
+        renderStatistics(stats);
+    } catch (err) {
+        console.error('加载统计失败:', err);
+    }
+}
+
+function renderStatistics(stats) {
+    // 渲染概览卡片
+    const overviewContainer = document.getElementById('statOverview');
+    if (overviewContainer) {
+        overviewContainer.innerHTML = `
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-info">
+                    <h3>总访客数</h3>
+                    <p>${stats.total}</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background: linear-gradient(135deg, #fa8c16 0%, #d46b08 100%);">⏳</div>
+                <div class="stat-info">
+                    <h3>待审核</h3>
+                    <p>${stats.statusSummary.pending}</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);">📋</div>
+                <div class="stat-info">
+                    <h3>待安保确认</h3>
+                    <p>${stats.statusSummary.approved}</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background: linear-gradient(135deg, #52c41a 0%, #389e0d 100%);">✓</div>
+                <div class="stat-info">
+                    <h3>已完结</h3>
+                    <p>${stats.statusSummary.completed}</p>
+                </div>
+            </div>
+        `;
+    }
+
+    // 渲染部门统计图表
+    renderDeptChart(stats.deptStats);
+
+    // 渲染日期趋势图表
+    renderDateChart(stats.dateStats);
+}
+
+function renderDeptChart(deptStats) {
+    const container = document.getElementById('deptChart');
+    if (!container) return;
+
+    const depts = Object.entries(deptStats);
+    if (depts.length === 0) {
+        container.innerHTML = '<p style="text-align:center;color:#999;">暂无数据</p>';
+        return;
+    }
+
+    // 简单的柱状图 HTML 实现
+    const maxValue = Math.max(...depts.map(d => d[1].total));
+
+    container.innerHTML = `
+        <div class="chart-container">
+            ${depts.map(([dept, data]) => `
+                <div class="chart-bar-item">
+                    <div class="chart-bar-label">${dept}</div>
+                    <div class="chart-bar-wrapper">
+                        <div class="chart-bar" style="width: ${(data.total / maxValue * 100).toFixed(1)}%;">
+                            <span class="chart-bar-value">${data.total}</span>
+                        </div>
+                    </div>
+                    <div class="chart-bar-detail">
+                        待审:${data.pending} 通过:${data.approved} 拒绝:${data.rejected} 完成:${data.completed}
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function renderDateChart(dateStats) {
+    const container = document.getElementById('dateChart');
+    if (!container) return;
+
+    const dates = Object.entries(dateStats).sort((a, b) => a[0].localeCompare(b[0]));
+    if (dates.length === 0) {
+        container.innerHTML = '<p style="text-align:center;color:#999;">暂无数据</p>';
+        return;
+    }
+
+    const maxValue = Math.max(...dates.map(d => d[1]));
+
+    container.innerHTML = `
+        <div class="date-chart-container">
+            ${dates.map(([date, count]) => `
+                <div class="date-chart-item">
+                    <div class="date-chart-bar" style="height: ${(count / maxValue * 100).toFixed(1)}%;">
+                        <span class="date-chart-value">${count}</span>
+                    </div>
+                    <div class="date-chart-label">${date.slice(5)}</div>
+                </div>
+            `).join('')}
+        </div>
+    `;
 }

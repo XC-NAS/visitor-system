@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>访客登记管理系统</title>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -32,9 +32,9 @@
                             <input type="text" id="selfVisitorIdCard" placeholder="请输入身份证号">
                         </div>
                         <div class="form-group">
-                            <label>来访单位 *</label>
-                            <select id="selfVisitorCompany" required>
-                                <option value="">请选择来访单位</option>
+                            <label>来访单位</label>
+                            <select id="selfVisitorCompany">
+                                <option value="">请选择来访单位（选填）</option>
                             </select>
                         </div>
                     </div>
@@ -145,6 +145,15 @@
                 <a href="#" class="menu-item admin-only" data-page="settings" onclick="showPage('settings')">
                     <span class="icon">⚙️</span>系统设置
                 </a>
+                <a href="#" class="menu-item admin-only" data-page="statistics" onclick="showPage('statistics')">
+                    <span class="icon">📈</span>统计报表
+                </a>
+                <a href="#" class="menu-item admin-only" data-page="logs" onclick="showPage('logs')">
+                    <span class="icon">📝</span>操作日志
+                </a>
+                <a href="#" class="menu-item admin-only" data-page="backup" onclick="showPage('backup')">
+                    <span class="icon">💾</span>数据备份
+                </a>
             </nav>
             <div class="user-info">
                 <span id="currentUserName">管理员</span>
@@ -225,9 +234,9 @@
                             <input type="text" id="visitorIdCard" placeholder="请输入身份证号">
                         </div>
                         <div class="form-group">
-                            <label>来访单位 *</label>
-                            <select id="visitorCompany" required>
-                                <option value="">请选择来访单位</option>
+                            <label>来访单位</label>
+                            <select id="visitorCompany">
+                                <option value="">请选择来访单位（选填）</option>
                             </select>
                         </div>
                     </div>
@@ -294,11 +303,13 @@
                     <input type="text" id="searchKeyword" placeholder="搜索访客姓名/电话" class="search-input">
                     <select id="filterStatus" class="filter-select">
                         <option value="">全部状态</option>
-                        <option value="pending">待审核</option>
-                        <option value="approved">已通过</option>
-                        <option value="rejected">已拒绝</option>
+                        <option value="pending">待科长审核</option>
+                        <option value="level2_pending">待部长审核</option>
+                        <option value="level3_pending">待被访人审核</option>
+                        <option value="security_pending">待安保确认</option>
                         <option value="arrived">已到访</option>
                         <option value="completed">已完结</option>
+                        <option value="rejected">已拒绝</option>
                     </select>
                     <input type="date" id="filterDate" class="filter-date">
                     <button onclick="searchVisitors()" class="btn-primary">搜索</button>
@@ -332,6 +343,13 @@
                     <button class="tab-btn" onclick="showApprovalTab('arrived')">已到访</button>
                     <button class="tab-btn" onclick="showApprovalTab('completed')">已完结</button>
                     <button class="tab-btn" onclick="showApprovalTab('rejected')">已拒绝</button>
+                </div>
+                <div class="batch-actions" style="margin-bottom: 15px; padding: 10px; background: #f5f7fa; border-radius: 6px;">
+                    <label style="margin-right: 15px;">
+                        <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()"> 全选
+                    </label>
+                    <button class="btn-success batch-action-btn" data-text="批量通过" onclick="batchApprove()" disabled>批量通过</button>
+                    <button class="btn-danger batch-action-btn" data-text="批量拒绝" onclick="batchReject()" disabled>批量拒绝</button>
                 </div>
                 <div id="approvalList" class="approval-list">
                     <!-- 动态加载审核列表 -->
@@ -462,11 +480,13 @@
                             <label>访客状态</label>
                             <select id="reportStatus">
                                 <option value="">全部状态</option>
-                                <option value="pending">待审核</option>
-                                <option value="approved">已通过</option>
-                                <option value="rejected">已拒绝</option>
+                                <option value="pending">待科长审核</option>
+                                <option value="level2_pending">待部长审核</option>
+                                <option value="level3_pending">待被访人审核</option>
+                                <option value="security_pending">待安保确认</option>
                                 <option value="arrived">已到访</option>
                                 <option value="completed">已完结</option>
+                                <option value="rejected">已拒绝</option>
                             </select>
                         </div>
                     </div>
@@ -646,6 +666,79 @@
                 </div>
 
                 <button onclick="saveSettings()" class="btn-primary">保存设置</button>
+            </div>
+
+            <!-- 统计报表 -->
+            <div id="statistics" class="content-page">
+                <h2>统计报表</h2>
+                <div class="filter-bar" style="margin-bottom: 20px;">
+                    <input type="date" id="statStartDate" class="filter-date">
+                    <input type="date" id="statEndDate" class="filter-date">
+                    <button onclick="loadStatistics()" class="btn-primary">生成报表</button>
+                </div>
+                <div id="statOverview" class="stats-cards"></div>
+                <div class="dashboard-section" style="margin-top: 20px;">
+                    <h3>部门访客统计</h3>
+                    <div id="deptChart" style="min-height: 200px;"></div>
+                </div>
+                <div class="dashboard-section" style="margin-top: 20px;">
+                    <h3>访客趋势</h3>
+                    <div id="dateChart" style="min-height: 200px;"></div>
+                </div>
+            </div>
+
+            <!-- 操作日志 -->
+            <div id="logs" class="content-page">
+                <h2>操作日志</h2>
+                <div class="filter-bar" style="margin-bottom: 20px;">
+                    <input type="text" id="logUserFilter" placeholder="用户名" class="search-input" style="width: 150px;">
+                    <input type="text" id="logActionFilter" placeholder="操作类型" class="search-input" style="width: 150px;">
+                    <input type="date" id="logStartDate" class="filter-date">
+                    <input type="date" id="logEndDate" class="filter-date">
+                    <button onclick="loadLogs(1)" class="btn-primary">查询</button>
+                    <button onclick="exportLogs()" class="btn-secondary">导出日志</button>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>时间</th>
+                            <th>用户</th>
+                            <th>操作</th>
+                            <th>详情</th>
+                            <th>IP地址</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logTableBody">
+                        <tr><td colspan="5" style="text-align:center;">点击查询加载日志</td></tr>
+                    </tbody>
+                </table>
+                <div id="logPagination" style="margin-top: 15px; text-align: center;"></div>
+            </div>
+
+            <!-- 数据备份 -->
+            <div id="backup" class="content-page">
+                <h2>数据备份</h2>
+                <div class="settings-section">
+                    <h3>创建备份</h3>
+                    <p style="color: #666; margin-bottom: 15px;">点击按钮创建当前数据的完整备份</p>
+                    <button onclick="createBackup()" class="btn-primary">立即备份</button>
+                </div>
+                <div class="dashboard-section" style="margin-top: 20px;">
+                    <h3>备份文件列表</h3>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>文件名</th>
+                                <th>大小</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="backupTableBody">
+                            <tr><td colspan="4" style="text-align:center;">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </main>
     </div>

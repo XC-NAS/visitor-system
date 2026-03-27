@@ -685,15 +685,19 @@ body {
     font-size: 13px;
 }
 
-/* 访客自助登记页面 */
+/* 访客自助登记页面 - 移动端优化 */
 .self-register-container {
     min-height: 100vh;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    padding: 40px 20px;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
 }
 
 .self-register-box {
-    max-width: 600px;
+    width: 100%;
+    max-width: 500px;
     margin: 0 auto;
     background: white;
     border-radius: 12px;
@@ -704,21 +708,100 @@ body {
 .self-register-header {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    padding: 30px;
+    padding: 25px 20px;
     text-align: center;
 }
 
 .self-register-header h1 {
-    font-size: 24px;
-    margin-bottom: 10px;
+    font-size: 22px;
+    margin-bottom: 8px;
 }
 
 .self-register-header p {
     opacity: 0.9;
+    font-size: 14px;
 }
 
 .self-register-box form {
-    padding: 30px;
+    padding: 20px;
+}
+
+/* 移动端表单优化 */
+@media (max-width: 768px) {
+    .self-register-container {
+        padding: 0;
+        background: white;
+    }
+
+    .self-register-box {
+        max-width: 100%;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    .self-register-header {
+        padding: 20px 15px;
+        border-radius: 0;
+    }
+
+    .self-register-header h1 {
+        font-size: 20px;
+    }
+
+    .self-register-box form {
+        padding: 15px;
+    }
+
+    .self-register-box .form-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .self-register-box .form-group {
+        margin-bottom: 15px;
+    }
+
+    .self-register-box .form-group label {
+        font-size: 14px;
+        margin-bottom: 5px;
+        color: #333;
+    }
+
+    .self-register-box .form-group input,
+    .self-register-box .form-group select,
+    .self-register-box .form-group textarea {
+        padding: 12px;
+        font-size: 16px; /* 防止iOS缩放 */
+        border: 1px solid #ddd;
+        border-radius: 8px;
+    }
+
+    .self-register-box textarea {
+        resize: vertical;
+        min-height: 80px;
+    }
+
+    .self-register-box .btn-full {
+        padding: 15px;
+        font-size: 16px;
+        border-radius: 8px;
+    }
+}
+
+/* 小屏幕手机优化 */
+@media (max-width: 375px) {
+    .self-register-header h1 {
+        font-size: 18px;
+    }
+
+    .self-register-box form {
+        padding: 12px;
+    }
+
+    .self-register-box .form-group {
+        margin-bottom: 12px;
+    }
 }
 
 .btn-full {
@@ -880,15 +963,150 @@ body {
     border-radius: 4px;
 }
 
-/* 照片预览模态框 */
-.photo-preview-modal .modal-content {
-    max-width: 700px;
-    text-align: center;
+.batch-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
-.photo-preview-modal img {
-    max-width: 100%;
-    max-height: 500px;
-    border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+.batch-actions button {
+    padding: 8px 20px;
+    font-size: 14px;
+}
+
+.batch-actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.visitor-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+/* 统计图表样式 */
+.chart-container {
+    padding: 20px;
+}
+
+.chart-bar-item {
+    margin-bottom: 15px;
+}
+
+.chart-bar-label {
+    font-size: 14px;
+    color: #555;
+    margin-bottom: 5px;
+}
+
+.chart-bar-wrapper {
+    background: #f0f2f5;
+    border-radius: 4px;
+    height: 30px;
+    overflow: hidden;
+}
+
+.chart-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 10px;
+    transition: width 0.3s ease;
+}
+
+.chart-bar-value {
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.chart-bar-detail {
+    font-size: 12px;
+    color: #888;
+    margin-top: 3px;
+}
+
+/* 日期趋势图样式 */
+.date-chart-container {
+    display: flex;
+    align-items: flex-end;
+    gap: 5px;
+    padding: 20px;
+    height: 200px;
+    overflow-x: auto;
+}
+
+.date-chart-item {
+    flex: 1;
+    min-width: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+.date-chart-bar {
+    width: 100%;
+    background: linear-gradient(to top, #1890ff, #52c41a);
+    border-radius: 4px 4px 0 0;
+    min-height: 20px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 5px;
+    transition: height 0.3s ease;
+}
+
+.date-chart-value {
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.date-chart-label {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    transform: rotate(-45deg);
+    white-space: nowrap;
+}
+
+/* 徽章闪烁动画 */
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+}
+
+.badge-pulse {
+    animation: pulse 0.5s ease-in-out 2;
+}
+
+/* 分页样式 */
+#logPagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+}
+
+#logPagination button {
+    padding: 8px 16px;
+    border: 1px solid #ddd;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#logPagination button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#logPagination span {
+    color: #666;
+    font-size: 14px;
 }
