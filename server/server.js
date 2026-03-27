@@ -73,6 +73,16 @@ function getDB() {
     return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
 }
 
+// 解码请求头中的用户信息
+function decodeHeader(value) {
+    if (!value) return '';
+    try {
+        return decodeURIComponent(value);
+    } catch (e) {
+        return value;
+    }
+}
+
 // 初始化
 db = initDB();
 
@@ -102,8 +112,9 @@ app.get('/api/visitors', (req, res) => {
     const data = getDB();
     const userId = req.headers['user-id'];
     const userRole = req.headers['user-role'];
-    const userDept = req.headers['user-department'];
+    const userDept = decodeHeader(req.headers['user-department']);
     const userPosition = req.headers['user-position'];
+    const userName = decodeHeader(req.headers['user-name']);
 
     let visitors = data.visitors;
 
@@ -123,7 +134,7 @@ app.get('/api/visitors', (req, res) => {
                 return pendingApproval || v.status === 'security_pending' || v.status === 'arrived' || v.status === 'completed';
             }
             // 或自己是被访人
-            if (v.visitedStaff === userId || v.visitedStaff === data.users.find(u => u.id == userId)?.realName) {
+            if (v.visitedStaff === userId || v.visitedStaff === userName) {
                 return true;
             }
             return false;
@@ -471,7 +482,7 @@ app.get('/api/backup', (req, res) => {
 
     // 添加日志
     const userId = req.headers['user-id'];
-    const userName = req.headers['user-name'];
+    const userName = decodeHeader(req.headers['user-name']);
     addLog(userId, userName, '数据备份', `创建备份文件: ${backupName}`);
 
     res.json({
@@ -542,7 +553,7 @@ app.post('/api/backup/restore', (req, res) => {
 
         // 添加日志
         const userId = req.headers['user-id'];
-        const userName = req.headers['user-name'];
+        const userName = decodeHeader(req.headers['user-name']);
         addLog(userId, userName, '数据恢复', `从备份恢复: ${fileName}`);
 
         res.json({ success: true });
@@ -563,7 +574,7 @@ app.delete('/api/backup/:filename', (req, res) => {
     fs.unlinkSync(filePath);
 
     const userId = req.headers['user-id'];
-    const userName = req.headers['user-name'];
+    const userName = decodeHeader(req.headers['user-name']);
     addLog(userId, userName, '删除备份', `删除文件: ${filename}`);
 
     res.json({ success: true });

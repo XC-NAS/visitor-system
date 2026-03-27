@@ -9,9 +9,9 @@ function getAuthHeaders() {
     if (currentUser) {
         headers['user-id'] = currentUser.id;
         headers['user-role'] = currentUser.role;
-        headers['user-department'] = currentUser.department || '';
+        headers['user-department'] = encodeURIComponent(currentUser.department || '');
         headers['user-position'] = currentUser.position || '';
-        headers['user-name'] = currentUser.realName || currentUser.username;
+        headers['user-name'] = encodeURIComponent(currentUser.realName || currentUser.username);
     }
     return headers;
 }
