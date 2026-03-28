@@ -2489,3 +2489,132 @@ async function confirmDeptImport() {
         alert('导入失败: ' + err.message);
     }
 }
+
+// ==================== 数据可视化图表 ====================
+let trendChart = null;
+let deptChart = null;
+
+function renderVisitorCharts(visitors) {
+    renderVisitorTrendChart(visitors);
+    renderDeptVisitorChart(visitors);
+}
+
+// 近7日访客趋势图
+function renderVisitorTrendChart(visitors) {
+    const ctx = document.getElementById('visitorTrendChart');
+    if (!ctx) return;
+
+    // 生成近7天日期
+    const dates = [];
+    const counts = [];
+    for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        dates.push(dateStr.slice(5)); // 显示 MM-DD
+        counts.push(visitors.filter(v => v.visitDate === dateStr).length);
+    }
+
+    if (trendChart) {
+        trendChart.destroy();
+    }
+
+    trendChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: [{
+                label: '访客数量',
+                data: counts,
+                borderColor: '#667eea',
+                backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 4,
+                pointBackgroundColor: '#667eea'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    }
+                }
+            }
+        }
+    });
+}
+
+// 部门访客统计图
+function renderDeptVisitorChart(visitors) {
+    const ctx = document.getElementById('deptVisitorChart');
+    if (!ctx) return;
+
+    // 统计各部门访客数量
+    const deptStats = {};
+    visitors.forEach(v => {
+        const dept = v.visitedDept || '未分配';
+        deptStats[dept] = (deptStats[dept] || 0) + 1;
+    });
+
+    // 取前6个部门，其余归为其他
+    const sortedDepts = Object.entries(deptStats)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6);
+
+    const labels = sortedDepts.map(d => d[0]);
+    const data = sortedDepts.map(d => d[1]);
+
+    // 配色方案
+    const colors = [
+        '#667eea', '#764ba2', '#f093fb', '#f5576c',
+        '#4facfe', '#00f2fe', '#43e97b', '#fa709a'
+    ];
+
+    if (deptChart) {
+        deptChart.destroy();
+    }
+
+    deptChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: colors.slice(0, labels.length),
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        boxWidth: 12,
+                        padding: 10,
+                        font: {
+                            size: 12
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
