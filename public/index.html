@@ -142,6 +142,9 @@
                 <a href="#" class="menu-item admin-only" data-page="users" onclick="showPage('users')">
                     <span class="icon">👥</span>用户管理
                 </a>
+                <a href="#" class="menu-item admin-only" data-page="blacklist" onclick="showPage('blacklist')">
+                    <span class="icon">🚫</span>黑名单管理
+                </a>
                 <a href="#" class="menu-item admin-only" data-page="settings" onclick="showPage('settings')">
                     <span class="icon">⚙️</span>系统设置
                 </a>
@@ -164,6 +167,28 @@
 
         <!-- 主内容区 -->
         <main class="main-content">
+            <!-- 顶部通知栏 -->
+            <div class="header-bar">
+                <h2 id="pageTitle">首页看板</h2>
+                <div class="header-actions">
+                    <div class="notification-center" onclick="toggleNotificationPanel()">
+                        <span class="icon">🔔</span>
+                        <span id="notificationBadge" class="badge" style="display:none;">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 通知面板 -->
+            <div id="notificationPanel" class="notification-panel" style="display:none;">
+                <div class="panel-header">
+                    <h3>通知中心</h3>
+                    <span onclick="toggleNotificationPanel()">&times;</span>
+                </div>
+                <div id="notificationList" class="notification-list">
+                    <p class="empty-text">暂无新通知</p>
+                </div>
+            </div>
+
             <!-- 首页看板 -->
             <div id="dashboard" class="content-page active">
                 <h2>首页看板</h2>
@@ -234,13 +259,17 @@
                             <input type="text" id="visitorIdCard" placeholder="请输入身份证号">
                         </div>
                         <div class="form-group">
+                            <label>车牌号</label>
+                            <input type="text" id="visitorPlateNumber" placeholder="请输入车牌号（如：京A12345）">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
                             <label>来访单位</label>
                             <select id="visitorCompany">
                                 <option value="">请选择来访单位（选填）</option>
                             </select>
                         </div>
-                    </div>
-                    <div class="form-row">
                         <div class="form-group">
                             <label>被访单位 *</label>
                             <select id="visitedOrg" required onchange="loadDepartments()">
@@ -859,6 +888,98 @@
                     <button onclick="closeSecurityCameraModal()" class="btn-secondary">取消</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- 黑名单管理页面 -->
+    <div id="blacklist" class="content-page">
+        <h2>黑名单管理</h2>
+        <div class="section-description">
+            <p>被列入黑名单的访客将无法预约或登记。用于拦截不受欢迎的访客。</p>
+        </div>
+        <div class="toolbar">
+            <button onclick="showBlacklistModal()" class="btn-primary">+ 添加黑名单</button>
+            <button onclick="loadBlacklist()" class="btn-secondary">刷新</button>
+        </div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>姓名</th>
+                    <th>电话</th>
+                    <th>身份证号</th>
+                    <th>原因</th>
+                    <th>添加时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="blacklistTableBody">
+                <tr><td colspan="6" style="text-align:center;color:#999;">加载中...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 操作日志页面 -->
+    <div id="logs" class="content-page">
+        <h2>操作日志</h2>
+        <div class="filter-bar">
+            <input type="date" id="logStartDate" class="filter-date">
+            <input type="date" id="logEndDate" class="filter-date">
+            <select id="logActionType" class="filter-select">
+                <option value="">全部操作</option>
+                <option value="create_visitor">创建访客</option>
+                <option value="update_visitor">更新访客</option>
+                <option value="delete_visitor">删除访客</option>
+                <option value="create_user">创建用户</option>
+                <option value="update_user">更新用户</option>
+                <option value="delete_user">删除用户</option>
+            </select>
+            <button onclick="loadLogs()" class="btn-primary">查询</button>
+            <button onclick="exportLogs()" class="btn-secondary">导出</button>
+        </div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>时间</th>
+                    <th>操作类型</th>
+                    <th>操作详情</th>
+                    <th>操作人</th>
+                </tr>
+            </thead>
+            <tbody id="logsTableBody">
+                <tr><td colspan="4" style="text-align:center;color:#999;">加载中...</td></tr>
+            </tbody>
+        </table>
+        <div id="logPagination" style="margin-top: 20px; text-align: center;"></div>
+    </div>
+
+    <!-- 添加黑名单模态框 -->
+    <div id="blacklistModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeBlacklistModal()">&times;</span>
+            <h2>添加黑名单</h2>
+            <form id="blacklistForm" onsubmit="saveBlacklist(event)">
+                <div class="form-group">
+                    <label>姓名 *</label>
+                    <input type="text" id="blacklistName" required placeholder="请输入姓名">
+                </div>
+                <div class="form-group">
+                    <label>电话</label>
+                    <input type="tel" id="blacklistPhone" placeholder="请输入电话">
+                </div>
+                <div class="form-group">
+                    <label>身份证号</label>
+                    <input type="text" id="blacklistIdCard" placeholder="请输入身份证号">
+                </div>
+                <div class="form-group">
+                    <label>拉黑原因 *</label>
+                    <textarea id="blacklistReason" required rows="3" placeholder="请输入拉黑原因"></textarea>
+                </div>
+                <p style="color: #999; font-size: 12px; margin-bottom: 15px;">电话和身份证号至少填一项，用于识别访客</p>
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">保存</button>
+                    <button type="button" onclick="closeBlacklistModal()" class="btn-secondary">取消</button>
+                </div>
+            </form>
         </div>
     </div>
 

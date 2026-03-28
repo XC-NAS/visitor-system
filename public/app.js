@@ -1,3 +1,283 @@
+// ==================== Toast & Loading 工具函数 ====================
+
+/**
+ * 显示 Toast 轻提示
+ * @param {string} message - 提示消息
+ * @param {string} type - 类型: success/error/warning/info
+ * @param {number} duration - 显示时长(毫秒)
+ */
+function showToast(message, type = 'info', duration = 3000) {
+    // 确保容器存在
+    let container = document.querySelector('.toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+
+    // 创建 toast 元素
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+
+    // 图标映射
+    const icons = {
+        success: '✓',
+        error: '✗',
+        warning: '⚠',
+        info: 'ℹ'
+    };
+
+    toast.innerHTML = `
+        <span class="toast-icon">${icons[type] || icons.info}</span>
+        <span class="toast-message">${message}</span>
+    `;
+
+    container.appendChild(toast);
+
+    // 自动移除
+    setTimeout(() => {
+        toast.classList.add('hiding');
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
+}
+
+/**
+ * 显示全局 Loading
+ * @param {string} text - 加载提示文字
+ */
+function showLoading(text = '加载中...') {
+    let overlay = document.querySelector('.loading-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.className = 'loading-overlay';
+        overlay.innerHTML = `
+            <div class="loading-spinner"></div>
+            <div class="loading-text">${text}</div>
+        `;
+        document.body.appendChild(overlay);
+    } else {
+        overlay.querySelector('.loading-text').textContent = text;
+        overlay.classList.remove('hidden');
+    }
+}
+
+/**
+ * 隐藏全局 Loading
+ */
+function hideLoading() {
+    const overlay = document.querySelector('.loading-overlay');
+    if (overlay) {
+        overlay.classList.add('hidden');
+    }
+}
+
+/**
+ * 设置按钮 Loading 状态
+ * @param {HTMLButtonElement} button - 按钮元素
+ * @param {boolean} loading - 是否 loading
+ * @param {string} originalText - 原始文字
+ */
+function setButtonLoading(button, loading, originalText) {
+    if (loading) {
+        button.dataset.originalText = originalText || button.textContent;
+        button.textContent = '处理中...';
+        button.classList.add('btn-loading');
+        button.disabled = true;
+    } else {
+        button.textContent = button.dataset.originalText || originalText;
+        button.classList.remove('btn-loading');
+        button.disabled = false;
+    }
+}
+
+// ==================== 通知中心 ====================
+let notificationPollingInterval = null;
+
+function toggleNotificationPanel() {
+    const panel = document.getElementById('notificationPanel');
+    if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        loadNotifications();
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+async function loadNotifications() {
+    try {
+        const notifications = await apiGet('/api/notifications');
+        const list = document.getElementById('notificationList');
+        const badge = document.getElementById('notificationBadge');
+
+        if (notifications.length === 0) {
+            list.innerHTML = '<p class="empty-text">暂无新通知</p>';
+            badge.style.display = 'none';
+            return;
+        }
+
+        badge.textContent = notifications.length;
+        badge.style.display = 'inline-block';
+
+        list.innerHTML = notifications.map(n => `
+            <div class="notification-item unread" onclick="handleNotificationClick(${n.id}, '${n.type}', ${n.data?.visitorId || 0})">
+                <div class="title">${n.title}</div>
+                <div class="message">${n.message}</div>
+                <div class="time">${formatDateTime(n.createdAt)}</div>
+            </div>
+        `).join('');
+    } catch (err) {
+        console.error('加载通知失败:', err);
+    }
+}
+
+async function handleNotificationClick(id, type, visitorId) {
+    // 标记已读
+    await apiPost(`/api/notifications/${id}/read`, {});
+
+    if (type === 'approval_required' && visitorId) {
+        showPage('approval');
+        loadApprovalList();
+    }
+
+    toggleNotificationPanel();
+    loadNotifications();
+}
+
+function startNotificationPolling() {
+    if (notificationPollingInterval) return;
+    notificationPollingInterval = setInterval(() => {
+        if (currentUser) loadNotifications();
+    }, 30000); // 30秒轮询一次
+}
+
+function stopNotificationPolling() {
+    if (notificationPollingInterval) {
+        clearInterval(notificationPollingInterval);
+        notificationPollingInterval = null;
+    }
+}
+
+// ==================== 黑名单管理 ====================
+async function loadBlacklist() {
+    try {
+        const list = await apiGet('/api/blacklist');
+        const tbody = document.getElementById('blacklistTableBody');
+
+        if (list.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">暂无黑名单记录</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = list.map(b => `
+            <tr>
+                <td>${b.name}</td>
+                <td>${b.phone || '-'}</td>
+                <td>${b.idCard || '-'}</td>
+                <td>${b.reason}</td>
+                <td>${formatDateTime(b.createdAt)}</td>
+                <td>
+                    <button class="btn-danger" onclick="removeFromBlacklist(${b.id})">移除</button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        showToast('加载黑名单失败', 'error');
+    }
+}
+
+function showBlacklistModal() {
+    const modal = document.getElementById('blacklistModal');
+    modal.classList.add('active');
+    document.getElementById('blacklistForm').reset();
+}
+
+function closeBlacklistModal() {
+    document.getElementById('blacklistModal').classList.remove('active');
+}
+
+async function saveBlacklist(event) {
+    event.preventDefault();
+    const name = document.getElementById('blacklistName').value.trim();
+    const phone = document.getElementById('blacklistPhone').value.trim();
+    const idCard = document.getElementById('blacklistIdCard').value.trim();
+    const reason = document.getElementById('blacklistReason').value.trim();
+
+    if (!phone && !idCard) {
+        showToast('电话和身份证号至少填一项', 'warning');
+        return;
+    }
+
+    const submitBtn = event.target.querySelector('button[type="submit"]');
+    setButtonLoading(submitBtn, true, '保存');
+
+    try {
+        await apiPost('/api/blacklist', { name, phone, idCard, reason });
+        showToast('添加成功', 'success');
+        closeBlacklistModal();
+        loadBlacklist();
+    } catch (err) {
+        showToast('添加失败: ' + err.message, 'error');
+    } finally {
+        setButtonLoading(submitBtn, false);
+    }
+}
+
+async function removeFromBlacklist(id) {
+    if (!confirm('确定从黑名单移除该访客？')) return;
+
+    try {
+        await apiDelete(`/api/blacklist/${id}`);
+        showToast('移除成功', 'success');
+        loadBlacklist();
+    } catch (err) {
+        showToast('移除失败', 'error');
+    }
+}
+
+// ==================== 操作日志 ====================
+let currentLogPage = 1;
+
+async function loadLogs() {
+    try {
+        const result = await apiGet(`/api/logs?page=${currentLogPage}&limit=20`);
+        const tbody = document.getElementById('logsTableBody');
+
+        if (result.logs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;">暂无日志记录</td></tr>';
+            document.getElementById('logPagination').innerHTML = '';
+            return;
+        }
+
+        tbody.innerHTML = result.logs.map(log => `
+            <tr>
+                <td>${formatDateTime(log.createdAt)}</td>
+                <td>${log.action}</td>
+                <td>${log.details}</td>
+                <td>${log.username || '-'}</td>
+            </tr>
+        `).join('');
+
+        // 分页
+        document.getElementById('logPagination').innerHTML = `
+            <button ${currentLogPage <= 1 ? 'disabled' : ''} onclick="changeLogPage(${currentLogPage - 1})">上一页</button>
+            <span>第 ${currentLogPage} / ${result.totalPages} 页</span>
+            <button ${currentLogPage >= result.totalPages ? 'disabled' : ''} onclick="changeLogPage(${currentLogPage + 1})">下一页</button>
+        `;
+    } catch (err) {
+        showToast('加载日志失败', 'error');
+    }
+}
+
+function changeLogPage(page) {
+    currentLogPage = page;
+    loadLogs();
+}
+
+function exportLogs() {
+    // 导出日志功能
+    showToast('导出功能开发中...', 'info');
+}
+
 // ==================== API 配置 ====================
 const API_BASE = '';
 
@@ -125,20 +405,27 @@ async function login() {
     const username = document.getElementById('loginUsername').value.trim();
     const password = document.getElementById('loginPassword').value;
     if (!username || !password) {
-        alert('请输入用户名和密码');
+        showToast('请输入用户名和密码', 'warning');
         return;
     }
+
+    const loginBtn = document.querySelector('#loginPage .btn-primary');
+    setButtonLoading(loginBtn, true, '登录');
+
     try {
         const res = await apiPost('/api/login', { username, password });
         if (res.error) {
-            alert(res.error);
+            showToast(res.error, 'error');
             return;
         }
         currentUser = res;
         sessionStorage.setItem('currentUser', JSON.stringify(res));
+        showToast('登录成功', 'success');
         showMainApp();
     } catch (err) {
-        alert('登录失败: ' + err.message);
+        showToast('登录失败: ' + err.message, 'error');
+    } finally {
+        setButtonLoading(loginBtn, false);
     }
 }
 
@@ -258,11 +545,15 @@ async function submitVisitorSelf(event) {
     const visitTime = document.getElementById('selfVisitTime').value;
     const reason = document.getElementById('selfVisitPurpose').value.trim();
     if (!name || !phone || !company || !visitedOrg || !visitedDept || !visitedStaff || !visitDate || !reason) {
-        alert('请填写完整信息');
+        showToast('请填写完整信息', 'warning');
         return;
     }
-    const settings = await apiGet('/api/settings');
+
+    const submitBtn = event.target.querySelector('button[type="submit"]');
+    setButtonLoading(submitBtn, true, '提交预约');
+
     try {
+        const settings = await apiGet('/api/settings');
         const result = await apiPost('/api/visitors', {
             name, phone, idCard, company, visitedOrg, visitedDept, visitedStaff,
             visitDate, visitTime, reason,
@@ -272,8 +563,11 @@ async function submitVisitorSelf(event) {
         document.getElementById('visitorSelfForm').style.display = 'none';
         document.getElementById('selfRegisterSuccess').style.display = 'block';
         document.getElementById('visitorCode').textContent = result.visitorCode;
+        showToast('预约提交成功', 'success');
     } catch (err) {
-        alert('提交失败: ' + err.message);
+        showToast('提交失败: ' + err.message, 'error');
+    } finally {
+        setButtonLoading(submitBtn, false);
     }
 }
 
@@ -288,7 +582,27 @@ function showPage(pageId) {
     document.querySelectorAll('.content-page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
     document.getElementById(pageId).classList.add('active');
-    event.target.classList.add('active');
+    if (event && event.target) event.target.classList.add('active');
+
+    // 更新页面标题
+    const pageTitles = {
+        'dashboard': '首页看板',
+        'visitor-register': '访客登记',
+        'visitor-list': '访客列表',
+        'approval': '审核管理',
+        'check-in-out': '进出登记',
+        'export': '数据导出',
+        'users': '用户管理',
+        'settings': '系统设置',
+        'qrcode': '二维码生成',
+        'report': '访客报表',
+        'statistics': '统计报表',
+        'logs': '操作日志',
+        'backup': '数据备份',
+        'blacklist': '黑名单管理'
+    };
+    document.getElementById('pageTitle').textContent = pageTitles[pageId] || '';
+
     if (pageId === 'dashboard') loadDashboard();
     if (pageId === 'visitor-register') initVisitorRegister();
     if (pageId === 'visitor-list') loadVisitorList();
@@ -300,8 +614,9 @@ function showPage(pageId) {
     if (pageId === 'qrcode') loadQRCodePage();
     if (pageId === 'report') loadReportPage();
     if (pageId === 'statistics') loadStatistics();
-    if (pageId === 'logs') loadLogs(1);
+    if (pageId === 'logs') { currentLogPage = 1; loadLogs(); }
     if (pageId === 'backup') loadBackupList();
+    if (pageId === 'blacklist') loadBlacklist();
 }
 
 async function loadDashboard() {
@@ -430,6 +745,7 @@ async function submitVisitor(event) {
     const name = document.getElementById('visitorName').value.trim();
     const phone = document.getElementById('visitorPhone').value.trim();
     const idCard = document.getElementById('visitorIdCard').value.trim();
+    const plateNumber = document.getElementById('visitorPlateNumber')?.value.trim() || '';
     const company = document.getElementById('visitorCompany').value;
     const visitedOrg = document.getElementById('visitedOrg').value;
     const visitedDept = document.getElementById('visitedDepartment').value;
@@ -438,25 +754,33 @@ async function submitVisitor(event) {
     const visitTime = document.getElementById('visitTime').value;
     const reason = document.getElementById('visitPurpose').value.trim();
     if (!name || !phone || !company || !visitedOrg || !visitedDept || !visitedStaff || !visitDate || !reason) {
-        alert('请填写完整信息');
+        showToast('请填写完整信息', 'warning');
         return;
     }
-    const settings = await apiGet('/api/settings');
+
+    const submitBtn = event.target.querySelector('button[type="submit"]');
+    setButtonLoading(submitBtn, true, '提交登记');
+
     try {
+        const settings = await apiGet('/api/settings');
         await apiPost('/api/visitors', {
-            name, phone, idCard, company, visitedOrg, visitedDept, visitedStaff,
+            name, phone, idCard, plateNumber, company, visitedOrg, visitedDept, visitedStaff,
             visitDate, visitTime, reason,
             status: settings.requireApproval ? 'pending' : 'approved',
             photo: capturedPhoto,
             registeredBy: currentUser ? currentUser.username : 'self'
         });
-        alert('登记成功');
+        showToast('登记成功', 'success');
         document.getElementById('visitorForm').reset();
         capturedPhoto = null;
         document.getElementById('photoPreview').style.display = 'none';
         stopCamera();
+        // 刷新访客列表
+        loadVisitorList();
     } catch (err) {
-        alert('登记失败: ' + err.message);
+        showToast('登记失败: ' + err.message, 'error');
+    } finally {
+        setButtonLoading(submitBtn, false);
     }
 }
 
