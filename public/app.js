@@ -1969,7 +1969,6 @@ function updateNotificationBadge(count) {
 
 // ==================== 操作日志 ====================
 let currentLogs = [];
-let currentLogPage = 1;
 let totalLogPages = 1;
 
 async function loadLogs(page = 1) {
